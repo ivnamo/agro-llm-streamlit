@@ -28,7 +28,14 @@ if st.button("Obtener recomendación ahora", type="primary"):
     with st.spinner("Consultando sistema inteligente de riego..."):
         try:
             response = requests.post(CLOUD_FUNCTION_URL, timeout=60)
-            data = response.json()
+            st.write("STATUS", response.status_code)
+            st.write("RAW TEXT", response.text)
+            try:
+                data = response.json()
+            except Exception as e:
+                st.error(f"JSON decode error: {e}")
+                st.stop()
+
         except Exception as e:
             st.error(f"Error al conectar con la función: {e}")
             st.stop()
