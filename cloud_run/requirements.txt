@@ -1,2 +1,10 @@
 requests
 google-cloud-storage
+
+
+#### cliente-hf
+google-cloud-bigquery
+google-cloud-storage
+faiss-cpu
+sentence-transformers
+requests
