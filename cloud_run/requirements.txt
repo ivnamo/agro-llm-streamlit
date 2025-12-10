@@ -1,10 +1,16 @@
-requests
-google-cloud-storage
+# HTTP y utilidades básicas
+requests>=2.31.0
 
+# Google Cloud
+google-cloud-storage>=2.10.0
+google-cloud-bigquery>=3.14.0
 
-#### cliente-hf
-google-cloud-bigquery
-google-cloud-storage
-faiss-cpu
-sentence-transformers
-requests
+# RAG: FAISS + NumPy
+faiss-cpu>=1.8.0
+numpy>=1.26.0
+
+# (Opcional pero recomendable para logs más legibles)
+# google-cloud-logging>=3.10.0
+
+# Si despliegas como Cloud Function / Cloud Run con Functions Framework:
+functions-framework>=3.5.0
