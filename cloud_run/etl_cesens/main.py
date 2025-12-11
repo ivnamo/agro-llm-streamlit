@@ -1,8 +1,8 @@
 import traceback
 from typing import Any, Tuple
 
-from .config import check_required_env
-from .etl_logic import run_backfill
+from config import check_required_env
+from etl_logic import run_backfill
 
 
 def backfill_cesens(request: Any) -> Tuple[str, int]:
