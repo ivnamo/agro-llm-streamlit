@@ -11,12 +11,17 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar TODO el repositorio (incluye cloud_run/ y common/)
+# Copiar TODO el repositorio
 COPY . .
 
-# Puerto standard de Cloud Run
+# Puerto standard
 ENV PORT=8080
 
-# Comando de arranque: ejecuta el main del agente de riego
-# CMD ["python", "-m", "cloud_run.irrigation_agent.main"]
+# ---------------------------------------------------------
+# SOLUCIÓN: Añadir /app al PYTHONPATH
+# Esto permite que los imports tipo "from cloud_run..." funcionen
+# ---------------------------------------------------------
+ENV PYTHONPATH="/app"
+
+# Comando de arranque con functions-framework
 CMD ["functions-framework", "--target=run_irrigation_agent", "--port=8080", "--source=cloud_run/irrigation_agent/main.py"]
