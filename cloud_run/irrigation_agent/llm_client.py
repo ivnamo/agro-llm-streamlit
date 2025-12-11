@@ -3,8 +3,8 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from config import HF_TOKEN, HF_MODEL_ID
-from prompts import SYSTEM_PROMPT, RESPONSE_SCHEMA_HINT
+from cloud_run.irrigation_agent.config import HF_TOKEN, HF_MODEL_ID
+from cloud_run.irrigation_agent.prompts import SYSTEM_PROMPT, RESPONSE_SCHEMA_HINT
 
 
 def _try_parse_json(raw: str) -> Optional[Dict[str, Any]]:
