@@ -2,13 +2,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt ./
+# 1) Instalar dependencias de backend
+COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar todo el código del repo dentro de la imagen
+# 2) Copiar TODO el código del repo
 COPY . .
 
-# Cambiar a la carpeta del servicio ETL
+# 3) Movernos a la carpeta del servicio ETL
 WORKDIR /app/cloud_run/etl_cesens
 
+# 4) Lanzar el servidor HTTP de Functions Framework
 CMD ["functions-framework", "--target=backfill_cesens", "--port=8080"]
