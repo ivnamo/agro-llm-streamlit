@@ -24,31 +24,56 @@ FLAT_PREFIX = get_env("CESENS_FLAT_PREFIX", "raw/cesens/all")
 
 # Métricas de interés por ubicación (acrónimos de Cesens)
 METRIC_ACRONIMOS_INTERES: Dict[int, List[str]] = {
+    # 7095 - Finca Experimental Mazarrón 1 (exterior)
     7095: [
-        "H",
-        "T",
-        "R",
-        "Plu",
-        "Vel",
-        "VelMax",
-        "Dir",
+        "H",        # Humedad relativa
+        "T",        # Temperatura
+        "R",        # Radiación solar
+        "Plu",      # Precipitaciones
+        "Vel",      # Velocidad viento
+        "VelMax",   # Racha máxima
+        "Dir",      # Dirección viento
     ],
+    # 8507 - S4 (invernadero con suelo)
     8507: [
-        "RF",
-        "T_in",
-        "H_in",
+        "RF",       # PPFD / flujo fotones
+        "T_in",     # Temperatura interna
+        "H_in",     # Humedad relativa interna
         "VWC10cm",
         "VWC20cm",
         "VWC40cm",
         "VWC60cm",
-        "VWC2",
+        "VWC2",     # contenido volumétrico conector 2
         "TS10cm",
         "TS20cm",
         "TS40cm",
         "TS60cm",
-        "TS2",
-        "Sal2",
+        "TS2",      # temperatura de suelo conector 2
+        "Sal2",     # conductividad eléctrica suelo
     ],
+    # 7094 - Sector 1 (invernadero sin suelo)
     7094: [
         "T_in",
         "H_in",
+        "T",
+        "H",
+        "R",
+        "P",        # presión atmosférica
+    ],
+    # 8506 - Sector 2 (invernadero con suelo)
+    8506: [
+        "T_in",
+        "H_in",
+        "VWC10cm",
+        "VWC20cm",
+        "VWC30cm",
+        "VWC40cm",
+        "VWC2",
+        "TS10cm",
+        "TS20cm",
+        "TS30cm",
+        "TS40cm",
+        "TS2",
+        "Sal2",
+    ],
+}
