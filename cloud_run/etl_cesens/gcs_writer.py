@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from google.cloud import storage
 
-from .config import GCS_BUCKET, FLAT_PREFIX
+from config import GCS_BUCKET, FLAT_PREFIX
 
 
 def upload_datos_to_gcs(
