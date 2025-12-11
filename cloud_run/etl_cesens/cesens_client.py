@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 
 import requests
 
-from .config import CESENS_BASE_URL, CESENS_USER, CESENS_PASS, CESENS_METRICAS_PATH
+from config import CESENS_BASE_URL, CESENS_USER, CESENS_PASS, CESENS_METRICAS_PATH
 
 
 # ==========================
