@@ -7,14 +7,14 @@ from config import (
     METRIC_ACRONIMOS_INTERES,
     FLAT_PREFIX,
 )
-from .cesens_client import (
+from cesens_client import (
     cesens_login,
     get_ubicaciones,
     get_metricas,
     organizar_metricas_por_ubicacion,
     get_datos,
 )
-from .gcs_writer import upload_datos_to_gcs
+from gcs_writer import upload_datos_to_gcs
 
 
 def run_backfill() -> str:
