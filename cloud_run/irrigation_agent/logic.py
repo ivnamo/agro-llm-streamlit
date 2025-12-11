@@ -7,7 +7,7 @@ from common.bq_timeseries import (
 from common.context_base import build_static_context
 from common.rag_client import rag_retrieve, build_rag_context_text
 
-from .config import LOCATION_ID, LOCATION_NAME, RAG_K
+from config import LOCATION_ID, LOCATION_NAME, RAG_K
 
 
 def build_rag_query_from_payload(payload: Dict[str, Any]) -> str:
