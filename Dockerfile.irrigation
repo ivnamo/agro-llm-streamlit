@@ -1,17 +1,21 @@
+# Dockerfile.irrigation
 FROM python:3.11-slim
+
+# Evitar bytecode y buffering
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY requirements.txt ./requirements.txt
+# Instalar dependencias
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiamos TODO el repo
+# Copiar TODO el repositorio (incluye cloud_run/ y common/)
 COPY . .
 
-# AÑADIR ESTO: que /app esté en PYTHONPATH
-ENV PYTHONPATH="/app:${PYTHONPATH}"
+# Puerto standard de Cloud Run
+ENV PORT=8080
 
-# Nos movemos a la carpeta del agente de riego
-WORKDIR /app/cloud_run/irrigation_agent
-
-CMD ["functions-framework", "--target=run_irrigation_agent", "--port=8080"]
+# Comando de arranque: ejecuta el main del agente de riego
+CMD ["python", "-m", "cloud_run.irrigation_agent.main"]
