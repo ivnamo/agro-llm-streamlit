@@ -98,7 +98,11 @@ def call_irrigation_agent_hf(
     }
 
     resp = requests.post(api_url, headers=headers, json=body, timeout=120)
-    resp.raise_for_status()
+    
+    if not resp.ok:
+        print("[HF ERROR]", resp.status_code, resp.text[:500])
+        resp.raise_for_status()
+    
     data = resp.json()
 
     text = data["choices"][0]["message"]["content"]
