@@ -1,7 +1,11 @@
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Any
 
-def get_env(name: str, default: Optional[str] = None) -> Optional[str]:
+# ==========================
+# CONFIG ENV
+# ==========================
+
+def get_env(name: str, default: str | None = None) -> str | None:
     v = os.getenv(name, default)
     return v.strip() if isinstance(v, str) else v
 
@@ -13,8 +17,8 @@ GCS_BUCKET = get_env("GCS_BUCKET")
 # Endpoint de métricas directas (igual que en Colab: /metricas/directas)
 CESENS_METRICAS_PATH = get_env("CESENS_METRICAS_PATH", "/metricas/directas")
 
-# Siempre 7 días hacia atrás para esta función
-DAYS_BACK = 7
+# Siempre N días hacia atrás para esta función
+DAYS_BACK = int(get_env("DAYS_BACK", "7"))
 
 # Ubicación objetivo (ej: 8507 para S4, 8506 para Sector 2, etc.)
 TARGET_UBICACION_ID = int(get_env("TARGET_UBICACION_ID", "8507"))  # por defecto S4
@@ -77,3 +81,14 @@ METRIC_ACRONIMOS_INTERES: Dict[int, List[str]] = {
         "Sal2",
     ],
 }
+
+def check_required_env() -> List[str]:
+    """
+    Devuelve la lista de variables de entorno obligatorias que faltan.
+    """
+    required = {
+        "CESENS_USER": CESENS_USER,
+        "CESENS_PASS": CESENS_PASS,
+        "GCS_BUCKET": GCS_BUCKET,
+    }
+    return [k for k, v in required.items() if not v]
