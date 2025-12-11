@@ -1,8 +1,12 @@
 import json
 from typing import Any, Dict
 
-from logic import build_irrigation_payload, build_rag_context_for_payload
-from llm_client import call_irrigation_agent_hf
+from cloud_run.irrigation_agent.logic import (
+    build_irrigation_payload,
+    build_rag_context_for_payload,
+)
+
+from cloud_run.irrigation_agent.llm_client import call_irrigation_agent_hf
 
 
 def run_irrigation_agent(request):
