@@ -1,7 +1,7 @@
 import datetime as dt
 from typing import Any, Dict, List
 
-from .config import (
+from config import (
     DAYS_BACK,
     TARGET_UBICACION_ID,
     METRIC_ACRONIMOS_INTERES,
