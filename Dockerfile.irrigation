@@ -18,4 +18,5 @@ COPY . .
 ENV PORT=8080
 
 # Comando de arranque: ejecuta el main del agente de riego
-CMD ["python", "-m", "cloud_run.irrigation_agent.main"]
+# CMD ["python", "-m", "cloud_run.irrigation_agent.main"]
+CMD ["functions-framework", "--target=run_irrigation_agent", "--port=8080", "--source=cloud_run/irrigation_agent/main.py"]
