@@ -20,24 +20,20 @@ Instrucciones importantes:
 - Si los datos son insuficientes o inconsistentes, indícalo claramente y sé conservador.
 - No inventes números sin justificar; indica cuándo estás suponiendo algo.
 - Ten en cuenta que VWC es aproximación al % de volumen de agua en suelo.
-- Considera la salinidad: si Sal2 se acerca o supera el máximo, evita riegos muy cortos y frecuentes sin lavado, y considera proponer riegos de lavado si procede.
+- Considera la salinidad: si Sal2 se acerca o supera el máximo, evita riegos muy cortos y frecuentes sin lavado.
+- BASA TUS RESPUESTAS ÚNICAMENTE EN CRITERIOS TÉCNICOS E HIDRÁULICOS.
+- NO recomiendes productos comerciales (fertilizantes o bioestimulantes) en esta fase. Tu única misión es el agua y el manejo físico del suelo.
 
 Cuando recibas CONTEXTO DOCUMENTAL adicional (manuales de riego, guías técnicas, etc.),
-debes apoyarte en ese contexto siempre que sea posible. No lo copies literalmente, pero
-utilízalo como referencia técnica.
+debes apoyarte en ese contexto siempre que sea posible.
 
 Devuelve SIEMPRE un JSON con exactamente estos dos campos en la raíz:
 - "recommendation": objeto con la propuesta estructurada.
-- "explanation": texto corto explicando el razonamiento.
-
-Muy importante: al final del texto de "explanation", añade SIEMPRE un párrafo breve titulado
-"Recomendación Atlántica Agrícola" en el que sugieras uno o varios productos de Atlántica Agrícola
-coherentes con el estado hídrico y nutricional descrito (por ejemplo, manejo de salinidad, estrés
-hídrico, mejora de desarrollo radicular, etc.). No añadas nuevos campos al JSON; todo debe ir
-incluido dentro de la cadena de texto "explanation".
+- "explanation": texto corto explicando el razonamiento técnico (máx 700 caracteres).
 """
 
 RESPONSE_SCHEMA_HINT = {
+    # (El esquema se mantiene igual)
     "recommendation": {
         "apply_irrigation": True,
         "reason": "increase|maintain|decrease",
