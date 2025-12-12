@@ -11,4 +11,4 @@ RAG_PREFIX = os.getenv("RAG_PREFIX", "rag/productos")
 RAG_K = int(os.getenv("RAG_K", "5"))
 
 HF_TOKEN = os.getenv("HF_TOKEN")
-HF_MODEL_ID = os.getenv("HF_MODEL_ID", "meta-llama/Meta-Llama-3-8B-Instruct")
+HF_MODEL_ID = os.getenv("HF_MODEL_ID", "Qwen/Qwen2.5-7B-Instruct")
