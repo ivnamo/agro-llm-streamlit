@@ -1,0 +1,218 @@
+[
+  {
+    "linea": "Bioestimulantes y Bioactivadores",
+    "nombre": "Razormin",
+    "tipo": "Bioestimulante total (Doble acción: Foliar y Radicular)",
+    "uso_principal": "Activación balanceada del metabolismo, recuperación de estrés (oxidativo), desarrollo vegetativo y formación de raíces absorbentes.",
+    "composicion_clave": "7% Aminoácidos libres, 4% N, 4% P2O5, 3% K2O, Polisacáridos y micronutrientes",
+    "dosis_ref": "Foliar: 200-300 cc/100L | Riego: 2-3 L/ha (Hortícolas) | Semillas: 0.5-2 L/ton"
+  },
+  {
+    "linea": "Bioestimulantes y Bioactivadores",
+    "nombre": "Florone",
+    "tipo": "Bioestimulante modulador (Fuente-Sumidero)",
+    "uso_principal": "Freno del crecimiento vegetativo excesivo, mejora de floración, homogeneidad de cuajado y llenado de frutos.",
+    "composicion_clave": "4% Aminoácidos, 10% P2O5, 10% K2O, 0.25% B, 0.2% Mo",
+    "dosis_ref": "Foliar: 50-75 cc/100L (Hortícolas), 70-80 cc/100L (Frutales) | Riego: 0.5-1.5 L/ha"
+  },
+  {
+    "linea": "Bioestimulantes y Bioactivadores",
+    "nombre": "Raykat Enraizador",
+    "tipo": "Bioestimulante radicular",
+    "uso_principal": "Inducción de raíces (primordios), establecimiento temprano del cultivo y tratamiento de semillas.",
+    "composicion_clave": "4% Aminoácidos, 15% Polisacáridos, 4% N, 8% P2O5, 3% K2O",
+    "dosis_ref": "Riego: 2-3 L/ha (Hortícolas), 3-5 L/ha (Frutales) | Semillas: 0.5-2 L/ton"
+  },
+  {
+    "linea": "Bioestimulantes y Bioactivadores",
+    "nombre": "Raykat Desarrollo",
+    "tipo": "Bioestimulante de crecimiento vegetativo",
+    "uso_principal": "Impulso vegetativo bajo estrés (térmico/hídrico), balance fotosíntesis/respiración.",
+    "composicion_clave": "4% Aminoácidos, 5% Extracto de algas, 6% N, 4% P2O5, Vitaminas",
+    "dosis_ref": "Foliar: 300-500 cc/100L | Riego: 3-5 L/ha"
+  },
+  {
+    "linea": "Bioestimulantes y Bioactivadores",
+    "nombre": "Raykat Brix",
+    "tipo": "Bioestimulante de maduración",
+    "uso_principal": "Incremento de grados Brix (azúcares), mejora de coloración, calibre y homogeneidad.",
+    "composicion_clave": "3% Aminoácidos, 18% K2O, 5% Extracto de algas, Polisacáridos",
+    "dosis_ref": "Foliar: 300-400 cc/100L | Riego (Alternativa): 3-5 L/ha"
+  },
+  {
+    "linea": "Bioestimulantes y Bioactivadores",
+    "nombre": "Fitomare",
+    "tipo": "Bioestimulante antiestrés (Algas + NPK)",
+    "uso_principal": "Protección osmótica frente a sequía/salinidad/temperatura, promoción de citoquininas y división celular.",
+    "composicion_clave": "15% Extracto de algas (Ascophyllum nodosum), 2% Aminoácidos, 5.5% N, 3% P2O5",
+    "dosis_ref": "Foliar: 200-300 cc/100L | Riego: 2-3 L/ha (Hortícolas), 3-5 L/ha (Frutales)"
+  },
+  {
+    "linea": "Bioestimulantes y Bioactivadores",
+    "nombre": "Biocat-15",
+    "tipo": "Bioactivador de suelos (Húmicos de bajo peso molecular)",
+    "uso_principal": "Mejora estructura del suelo (CIC), desbloqueo de nutrientes, retención de agua y estimulación radicular.",
+    "composicion_clave": "15% Extracto húmico total (7% Húmicos, 8% Fúlvicos), 4.5% K2O",
+    "dosis_ref": "Riego: 5-20 L/ha (Hortícolas), 10-40 L/ha (Frutales)"
+  },
+  {
+    "linea": "Soluciones Diana (Precisión)",
+    "nombre": "Archer Eclipse",
+    "tipo": "Protector solar con Tecnología MOAVA",
+    "uso_principal": "Triple barrera (Física, UV, Antioxidante) contra quemaduras solares y estrés térmico.",
+    "composicion_clave": "33% CaO, 1.5% Zn, 0.5% Mn, Compuestos orgánicos protectores",
+    "dosis_ref": "Uso foliar (Dosis no especificada en ficha, uso como protector solar)"
+  },
+  {
+    "linea": "Soluciones Diana (Precisión)",
+    "nombre": "Archer Force",
+    "tipo": "Inductor de resistencias",
+    "uso_principal": "Activación de defensas naturales (SAR) ante estrés biótico/abiótico, sinergia con fungicidas.",
+    "composicion_clave": "6% Aminoácidos libres (específicos), 1.2% N Orgánico",
+    "dosis_ref": "Foliar (Principalmente) y Fertirriego"
+  },
+  {
+    "linea": "Soluciones Diana (Precisión)",
+    "nombre": "Archer OsmoCare",
+    "tipo": "Osmoprotector antioxidante (Sólido)",
+    "uso_principal": "Firmeza de fruto, reducción de cracking, flujo de Calcio bajo estrés.",
+    "composicion_clave": "59% Osmoprotectores orgánicos (glicina betaína), 9% CaO, 3% MgO",
+    "dosis_ref": "Foliar: 150-300 g/100L | Riego: 1-3 kg/ha"
+  },
+  {
+    "linea": "Soluciones Diana (Precisión)",
+    "nombre": "Archer Ruptor + Boost",
+    "tipo": "Homogeneizador de brotación",
+    "uso_principal": "Ruptura de dormancia sincronizada, uniformidad en floración y maduración.",
+    "composicion_clave": "Ruptor (15% N, 3% Ca) + Boost (17% N, 12.5% Ca)",
+    "dosis_ref": "Exclusivamente foliar (Uso invernal)"
+  },
+  {
+    "linea": "Soluciones Diana (Precisión)",
+    "nombre": "Archer Zucchero",
+    "tipo": "Traslocador de azúcares",
+    "uso_principal": "Movilización de azúcares a fruto/tubérculo, aumento de peso y grados Brix.",
+    "composicion_clave": "8.5% Boro, 0.05% Molibdeno, Poliaminas",
+    "dosis_ref": "Foliar y Riego"
+  },
+  {
+    "linea": "Microorganismos Atlanticell",
+    "nombre": "Atlanticell Micomix (Rizamix)",
+    "tipo": "Bioestimulante (Micorrizas + Bacterias)",
+    "uso_principal": "Máxima absorción de agua/nutrientes, solubilización de P, K, Si bloqueados.",
+    "composicion_clave": "Micorrizas (Rhizoglomus/Funneliformis), Bacterias (Bacillus), Micronutrientes quelatados",
+    "dosis_ref": "Suelo: 1-1.5 kg/ha (Hortícolas/Frutales) | Semillas: 1-1.5 kg/ton"
+  },
+  {
+    "linea": "Microorganismos Atlanticell",
+    "nombre": "Atlanticell Pochomix",
+    "tipo": "Bioestimulante (Pochonia chlamydosporia)",
+    "uso_principal": "Mejora arquitectura radicular, vigor y floración homogénea.",
+    "composicion_clave": "Micorrizas, Hongos endófitos (Pochonia chlamydosporia), Extracto de algas",
+    "dosis_ref": "Suelo: 1-2 kg/ha (Plena producción) | Semillas: 1-1.5 kg/ton"
+  },
+  {
+    "linea": "Microorganismos Atlanticell",
+    "nombre": "Atlanticell Trichomix",
+    "tipo": "Bioestimulante (Trichoderma + Micorrizas)",
+    "uso_principal": "Bioestimulación frente a estrés hídrico y salino, rápida colonización (48h).",
+    "composicion_clave": "Micorrizas, Trichoderma harzianum/viridae, Extracto de algas",
+    "dosis_ref": "Suelo: 1-2 kg/ha | Extensivos: 250-750 g/ha"
+  },
+  {
+    "linea": "Microorganismos Atlanticell",
+    "nombre": "Atlanticell Nitromix",
+    "tipo": "Fijador de Nitrógeno biológico",
+    "uso_principal": "Fijación de N atmosférico, solubilización de P y K, reducción de lixiviación.",
+    "composicion_clave": "Micorrizas + 5 cepas de bacterias fijadoras (Azotobacter, Azospirillum, etc.)",
+    "dosis_ref": "Suelo: 1-2 kg/ha | Semillas: 0.5-1 kg/ton"
+  },
+  {
+    "linea": "Biocontrol y Extractos Botánicos",
+    "nombre": "Canelys",
+    "tipo": "Fungicida / Acaricida (Extracto de Canela)",
+    "uso_principal": "Control de Oídio, Ácaros y Sigatoka negra (Residuo Cero).",
+    "composicion_clave": "70% Extracto concentrado de canela (Cinnamomum zeylanicum)",
+    "dosis_ref": "Foliar: 2-4 cc/L (General), 3.5-5 cc/L (Alta presión), 0.75-1 L/ha (Banano/Extensivos)"
+  },
+  {
+    "linea": "Biocontrol y Extractos Botánicos",
+    "nombre": "Nemagold",
+    "tipo": "Bionematicida (Tagetes + Algas)",
+    "uso_principal": "Control de nematodos agalladores y regeneración radicular.",
+    "composicion_clave": "80% Extracto de Tagetes spp., 10% Extracto de Ascophyllum nodosum",
+    "dosis_ref": "Riego: 7-10 L/ha (Preventivo), 10-15 L/ha (Erradicante/Curativo)"
+  },
+  {
+    "linea": "Biocontrol y Extractos Botánicos",
+    "nombre": "Mimoten",
+    "tipo": "Biofungicida (Mimosa tenuiflora)",
+    "uso_principal": "Control de Mildiu, Oídio, Botrytis, Royas, Sigatoka (Acción secante e inductora).",
+    "composicion_clave": "80% Extracto de Mimosa tenuiflora",
+    "dosis_ref": "Foliar: 2.5-3.5 cc/L | Riego: 2-4 L/ha | Endoterapia: 5-10 cc/planta"
+  },
+  {
+    "linea": "Biocontrol y Extractos Botánicos",
+    "nombre": "Kabon",
+    "tipo": "Bioinsecticida (Palma saponificada)",
+    "uso_principal": "Insectos de cuerpo blando (Mosca blanca, pulgón, trips) y limpieza de melazas.",
+    "composicion_clave": "50% Extracto de palma africana saponificado",
+    "dosis_ref": "Foliar: 4-6 cc/L (Insectos), 3.5-4 cc/L (Ácaros), 5-7 cc/L (Cochinillas)"
+  },
+  {
+    "linea": "Biocontrol y Extractos Botánicos",
+    "nombre": "Zytron",
+    "tipo": "Antimicrobiano (Semillas de cítricos)",
+    "uso_principal": "Bactericida, fungicida, cicatrizante y post-cosecha.",
+    "composicion_clave": "20% Extracto de semillas de cítricos",
+    "dosis_ref": "Foliar: 1-2 cc/L (Antimicrobiano) | Post-cosecha: 2-4 cc/L"
+  },
+  {
+    "linea": "Nutrición Vegetal - Solucat",
+    "nombre": "Solucat 10-52-10",
+    "tipo": "Fertilizante NPK Soluble (Alto Fósforo)",
+    "uso_principal": "Arranque, trasplante, brotación y etapas iniciales para potenciar enraizamiento y floración[cite: 27, 31, 34].",
+    "composicion_clave": "10% N, 52% P2O5, 10% K2O + Microelementos (Fe, Mn, B, Cu, Zn)[cite: 38].",
+    "dosis_ref": "Hortícolas/Frutales: 5-25 kg/ha | Hidroponía: 2.5-10 kg/ha | [cite_start]Viveros: 3-5 kg/ha[cite: 42]."
+  },
+  {
+    "linea": "Nutrición Vegetal - Solucat",
+    "nombre": "Solucat 25-5-5",
+    "tipo": "Fertilizante NPK Soluble (Alto Nitrógeno)",
+    "uso_principal": "Brotación, trasplante y fases de crecimiento vegetativo intenso[cite: 27, 31, 34].",
+    "composicion_clave": "25% N, 5% P2O5, 5% K2O + Microelementos (Fe, Mn, B, Cu, Zn)[cite: 38].",
+    "dosis_ref": "Hortícolas/Frutales: 5-25 kg/ha | Hidroponía: 2.5-10 kg/ha | [cite_start]Extensivos: 2-10 kg/ha[cite: 42]."
+  },
+  {
+    "linea": "Nutrición Vegetal - Solucat",
+    "nombre": "Solucat 11-40-11",
+    "tipo": "Fertilizante NPK Soluble (Fósforo Balanceado)",
+    "uso_principal": "Etapas de floración y fructificación[cite: 28, 32, 34].",
+    "composicion_clave": "11% N, 40% P2O5, 11% K2O + Microelementos (Fe, Mn, B, Cu, Zn)[cite: 38].",
+    "dosis_ref": "Hortícolas/Frutales: 5-25 kg/ha | [cite_start]Hidroponía: 2.5-10 kg/ha[cite: 42]."
+  },
+  {
+    "linea": "Nutrición Vegetal - Solucat",
+    "nombre": "Solucat 20-20-20",
+    "tipo": "Fertilizante NPK Soluble (Equilibrado)",
+    "uso_principal": "Mantenimiento, desarrollo equilibrado, floración y fructificación[cite: 28, 32, 34].",
+    "composicion_clave": "20% N, 20% P2O5, 20% K2O + Microelementos (Fe, Mn, B, Cu, Zn)[cite: 38].",
+    "dosis_ref": "Hortícolas/Frutales: 5-25 kg/ha | [cite_start]Hidroponía: 2.5-10 kg/ha[cite: 42]."
+  },
+  {
+    "linea": "Nutrición Vegetal - Solucat",
+    "nombre": "Solucat 15-5-35",
+    "tipo": "Fertilizante NPK Soluble (Alto Potasio)",
+    "uso_principal": "Engorde, maduración y finalización hasta recolección[cite: 29, 33, 34].",
+    "composicion_clave": "15% N, 5% P2O5, 35% K2O + Microelementos (Fe, Mn, B, Cu, Zn)[cite: 38].",
+    "dosis_ref": "Hortícolas/Frutales: 5-25 kg/ha | [cite_start]Hidroponía: 2.5-10 kg/ha[cite: 42]."
+  },
+  {
+    "linea": "Nutrición Vegetal - Solucat",
+    "nombre": "Solucat 10-10-40",
+    "tipo": "Fertilizante NPK Soluble (Muy Alto Potasio)",
+    "uso_principal": "Maduración final, calidad de fruto y cierre de ciclo hasta recolección[cite: 29, 33, 34].",
+    "composicion_clave": "10% N, 10% P2O5, 40% K2O + Microelementos (Fe, Mn, B, Cu, Zn)[cite: 38].",
+    "dosis_ref": "Hortícolas/Frutales: 5-25 kg/ha | Hidroponía: 2.5-10 kg/ha | [cite_start]Extensivos: 2-10 kg/ha[cite: 42]."
+  }
+]
