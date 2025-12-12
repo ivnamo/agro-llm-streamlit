@@ -8,7 +8,7 @@ LOCATION_NAME = os.getenv("LOCATION_NAME", "S4 - Invernadero")
 
 # Hugging Face (router)
 HF_TOKEN = os.getenv("HF_TOKEN")
-HF_MODEL_ID = os.getenv("HF_MODEL_ID", "deepseek-ai/DeepSeek-V3.2")
+HF_MODEL_ID = os.getenv("HF_MODEL_ID", "meta-llama/Meta-Llama-3-8B-Instruct")
 
 # RAG: K por defecto para este agente (puede sobreescribir el de common si quieres)
 RAG_K = int(os.getenv("RAG_K", "5"))
