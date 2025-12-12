@@ -1,54 +1,50 @@
 import json
 from typing import Any, Dict
-
 from cloud_run.irrigation_agent.logic import (
     build_irrigation_payload,
     build_rag_context_for_payload,
 )
-
 from cloud_run.irrigation_agent.llm_client import call_irrigation_agent_hf
-
 
 def run_irrigation_agent(request):
     """
-    Endpoint HTTP para el agente de riego basado en Hugging Face:
-    - Método: POST.
-    - Opcionalmente puede recibir un JSON con 'context_overrides' y 'farmer_notes'.
+    Endpoint HTTP para el agente de riego.
+    Devuelve: { "agent_response": {...}, "data_context": {...} }
     """
     try:
-        # CORS básico
+        # CORS
         if request.method == "OPTIONS":
             headers = {
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type",
             }
             return ("", 204, headers)
 
-        try:
-            body: Dict[str, Any] = request.get_json(silent=True) or {}
-        except Exception:
-            body = {}
-
-        # Construir payload completo (datos + contexto)
+        body = request.get_json(silent=True) or {}
+        
+        # 1. Recuperar datos y construir payload
         payload = build_irrigation_payload(body)
 
-        # RAG: contexto documental (si está disponible)
+        # 2. RAG (Contexto documental)
         rag_context_text = build_rag_context_for_payload(payload)
 
-        # Llamar al LLM de Hugging Face
-        result = call_irrigation_agent_hf(payload, rag_context_text=rag_context_text)
+        # 3. Llamar al LLM (Cerebro)
+        llm_result = call_irrigation_agent_hf(payload, rag_context_text=rag_context_text)
 
-        headers = {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
+        # 4. PREPARAR RESPUESTA COMPLETA
+        # Devolvemos tanto la opinión del LLM como los datos crudos para el Frontend
+        response_data = {
+            "agent_response": llm_result,  # Lo que dice la IA
+            "data_context": {             # Los datos que miró la IA (para gráficas)
+                "daily_features": payload.get("daily_features_last_days", []),
+                "recent_timeseries": payload.get("recent_timeseries_last_hours", {})
+            }
         }
-        return (json.dumps(result, ensure_ascii=False), 200, headers)
+
+        headers = {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}
+        return (json.dumps(response_data, ensure_ascii=False), 200, headers)
 
     except Exception as e:
-        headers = {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-        }
-        error_body = {"error": str(e)}
-        return (json.dumps(error_body, ensure_ascii=False), 500, headers)
+        headers = {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}
+        return (json.dumps({"error": str(e)}), 500, headers)
