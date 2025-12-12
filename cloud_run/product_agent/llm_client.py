@@ -1,10 +1,9 @@
-
 import json
 import requests
 from typing import Any, Dict, Optional
+
 from cloud_run.product_agent.config import HF_TOKEN, HF_MODEL_ID
 from cloud_run.product_agent.prompts import SYSTEM_PROMPT, RESPONSE_SCHEMA_HINT
-
 
 
 def _try_parse_json(raw: str) -> Optional[Dict[str, Any]]:
@@ -33,19 +32,18 @@ def _try_parse_json(raw: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def call_irrigation_agent_hf(
+def call_product_agent_hf(
     payload: Dict[str, Any],
     rag_context_text: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Llama al modelo de Hugging Face vía API unificada /v1/chat/completions
-    y devuelve recommendation + explanation (parseado).
-    Puede recibir opcionalmente un bloque de contexto RAG en texto plano.
+    Llama al modelo de Hugging Face para generar el Plan de Productos.
+    Inyecta el Catálogo Maestro y el RAG de productos en el prompt.
     """
     if not HF_TOKEN:
         return {
-            "recommendation": None,
-            "explanation": "HF_TOKEN no está configurado en el entorno de ejecución.",
+            "product_plan": [],
+            "agronomic_advice": "HF_TOKEN no está configurado en el entorno de ejecución.",
         }
 
     api_url = "https://router.huggingface.co/v1/chat/completions"
@@ -54,11 +52,15 @@ def call_irrigation_agent_hf(
         "Content-Type": "application/json",
     }
 
+    # 1. Recuperamos el Catálogo Maestro (El Guardarraíl)
+    catalog_block = payload.get("catalog_context", "")
+
+    # 2. Preparamos el bloque RAG (Fichas técnicas)
     rag_block = ""
     if rag_context_text:
         rag_block = (
-            "Además dispones del siguiente CONTEXTO DOCUMENTAL procedente de manuales de riego "
-            "y guías técnicas (no lo reproduzcas literalmente, pero úsalo como referencia técnica):\n\n"
+            "Además dispones del siguiente CONTEXTO DOCUMENTAL procedente de Fichas Técnicas "
+            "y Vademécum de Atlántica Agrícola (úsalo para verificar dosis y composición):\n\n"
             f"{rag_context_text}\n\n"
             "Fin del contexto documental.\n\n"
         )
@@ -66,22 +68,23 @@ def call_irrigation_agent_hf(
     json_instructions = (
         "Muy importante:\n"
         "- Responde EXCLUSIVAMENTE con un ÚNICO objeto JSON válido.\n"
+        "- El JSON debe contener las claves 'product_plan' (lista) y 'agronomic_advice' (texto).\n"
         "- No incluyas nada de texto antes ni después del JSON.\n"
-        "- No uses bloques ```json ni ningún tipo de marcado de código.\n"
-        "- No añadas comentarios dentro del JSON.\n"
-        "- El campo \"explanation\" debe ser un texto corto (máximo ~700 caracteres), "
-        "no una explicación muy larga.\n"
+        "- No uses bloques ```json ni marcado de código.\n"
     )
 
+    # 3. Construimos el prompt final
+    # IMPORTANTE: El catálogo va primero para fijar las restricciones.
     user_prompt = (
-        "Usa el siguiente JSON con datos de la parcela para generar una "
-        "recomendación de riego para las próximas 24 horas. "
-        "Devuelve SOLO un JSON con 'recommendation' y 'explanation'.\n\n"
-        "Ejemplo de estructura de respuesta (no copies los valores, solo la forma):\n"
+        f"{catalog_block}\n\n"
+        "Usa el catálogo anterior (obligatorio), el contexto RAG y la siguiente situación agronómica "
+        "(que incluye la recomendación de riego previa) para generar un Plan de Manejo de Productos.\n"
+        "Devuelve SOLO un JSON con 'product_plan' y 'agronomic_advice'.\n\n"
+        "Ejemplo de estructura de respuesta:\n"
         f"{json.dumps(RESPONSE_SCHEMA_HINT, ensure_ascii=False, indent=2)}\n\n"
         f"{json_instructions}\n"
         + rag_block
-        + "JSON de entrada:\n"
+        + "JSON de entrada (Situación):\n"
         f"{json.dumps(payload, ensure_ascii=False)}"
     )
 
@@ -93,8 +96,8 @@ def call_irrigation_agent_hf(
     body = {
         "model": HF_MODEL_ID,
         "messages": messages,
-        "temperature": 0.3,
-        "max_tokens": 1200,
+        "temperature": 0.3, # Baja temperatura para respetar el catálogo
+        "max_tokens": 1500,
     }
 
     resp = requests.post(api_url, headers=headers, json=body, timeout=120)
@@ -104,20 +107,21 @@ def call_irrigation_agent_hf(
         resp.raise_for_status()
     
     data = resp.json()
-
     text = data["choices"][0]["message"]["content"]
 
     parsed = _try_parse_json(text)
+    
     if parsed is None:
         return {
-            "recommendation": None,
-            "explanation": (
-                "El modelo de Hugging Face no devolvió un JSON parseable. "
-                f"Respuesta cruda (primeros 1000 caracteres): {text[:1000]}"
+            "product_plan": [],
+            "agronomic_advice": (
+                "El modelo no devolvió un JSON válido. "
+                f"Respuesta cruda: {text[:500]}..."
             ),
         }
 
-    parsed.setdefault("recommendation", None)
-    parsed.setdefault("explanation", "")
+    # Aseguramos que las claves existan para evitar errores en el frontend
+    parsed.setdefault("product_plan", [])
+    parsed.setdefault("agronomic_advice", "Sin consejo agronómico generado.")
 
     return parsed
