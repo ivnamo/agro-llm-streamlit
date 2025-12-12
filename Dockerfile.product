@@ -1,0 +1,27 @@
+# Usamos la misma base que los otros servicios
+FROM python:3.11-slim
+
+# Evitar bytecode y buffering para logs más claros
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# 1. Instalar dependencias
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 2. Copiar TODO el código (incluyendo common/, cloud_run/ y el catalog.json)
+COPY . .
+
+# 3. Configurar PYTHONPATH para que encuentre los módulos 'common' y 'cloud_run'
+ENV PYTHONPATH="/app"
+
+# 4. Configurar el puerto y la ruta RAG por defecto para este servicio
+ENV PORT=8080
+ENV RAG_PREFIX="rag/productos"
+
+# 5. Comando de arranque apuntando al nuevo agente
+# target: nombre de la función en main.py (run_product_agent)
+# source: ruta al archivo main.py
+CMD ["functions-framework", "--target=run_product_agent", "--port=8080", "--source=cloud_run/product_agent/main.py"]
