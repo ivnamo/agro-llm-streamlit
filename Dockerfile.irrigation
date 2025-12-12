@@ -23,5 +23,8 @@ ENV PORT=8080
 # ---------------------------------------------------------
 ENV PYTHONPATH="/app"
 
+# Forzamos a que este contenedor lea SOLO la carpeta de manuales técnicos
+ENV RAG_PREFIX="rag/manuales"
+
 # Comando de arranque con functions-framework
 CMD ["functions-framework", "--target=run_irrigation_agent", "--port=8080", "--source=cloud_run/irrigation_agent/main.py"]
