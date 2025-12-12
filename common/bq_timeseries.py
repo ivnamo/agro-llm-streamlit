@@ -32,7 +32,7 @@ def query_daily_features_last_days(days: int = 7) -> List[Dict[str, Any]]:
     return results
 
 
-def query_recent_timeseries(hours_back: int = 24) -> Dict[str, List[Dict[str, Any]]]:
+def query_recent_timeseries(hours_back: int = 72) -> Dict[str, List[Dict[str, Any]]]:
     """
     Devuelve serie temporal ancha (wide) de las últimas horas para cesens_s4_wide.
     """
