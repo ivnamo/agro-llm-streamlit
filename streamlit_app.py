@@ -142,9 +142,13 @@ if submitted:
     # --- PESTAÑA 1: DASHBOARD ---
     with tab_dashboard:
         st.markdown("### 📡 Estado de los Sensores")
-        render_quality_indicator(raw_data)
-        
-        df_ts = parse_timeseries_to_df(raw_data.get("recent_timeseries", {}))
+        # Protección por si raw_data viene vacío
+        if raw_data:
+            render_quality_indicator(raw_data)
+            df_ts = parse_timeseries_to_df(raw_data.get("recent_timeseries", {}))
+        else:
+            st.warning("⚠️ No se pudieron recuperar datos de sensores.")
+            df_ts = pd.DataFrame()
         
         if not df_ts.empty:
             cols_vwc = [c for c in df_ts.columns if "VWC" in c]
@@ -166,39 +170,36 @@ if submitted:
 
         st.divider()
         st.markdown("### 📈 Tendencias Diarias")
-        daily_list = raw_data.get("daily_features", [])
+        daily_list = raw_data.get("daily_features", []) if raw_data else []
         if daily_list:
             df_daily = pd.DataFrame(daily_list)
             if "fecha" in df_daily.columns:
                 df_daily = df_daily.set_index("fecha")
             
-            # <--- CAMBIO: Solución error use_container_width
-            # Usamos una configuración compatible o simplemente .dataframe(df) sin argumentos extraños
+            # --- CORRECCIÓN ERROR STREAMLIT ---
+            # El error pedía usar width='stretch' en lugar de use_container_width
             try:
-                st.dataframe(df_daily, use_container_width=True)
+                st.dataframe(df_daily, width=None) # Dejamos que Streamlit decida el ancho por defecto
             except:
-                # Fallback por si la versión de streamlit se queja
-                st.dataframe(df_daily) 
+                st.dataframe(df_daily)
         else:
             st.info("No hay features diarias disponibles.")
-
-    # --- PESTAÑA 2: RIEGO ---
+  # --- PESTAÑA 2: RIEGO ---
     with tab_riego:
-        # <--- CAMBIO CRÍTICO: Protección contra None
-        # Si recommendation es None, asignamos un dict vacío {}
-        reco = irrigation_reco.get("recommendation") or {} 
-        expl = irrigation_reco.get("explanation", "Sin explicación disponible.")
-        
+        # --- PROTECCIÓN ROBUSTA CONTRA ERRORES 402/500 ---
+        # Si falla la IA, irrigation_reco puede ser None o contener solo un error
+        reco = irrigation_reco.get("recommendation") if irrigation_reco else None
+        expl = irrigation_reco.get("explanation", "Error de conexión con el cerebro de riego.") if irrigation_reco else "Error fatal."
+
         if not reco:
-            st.error("⚠️ El Agente de Riego no pudo generar una recomendación válida (posible error del modelo).")
-            st.write("**Detalle del error:**", expl)
+            st.error("⚠️ El sistema de IA no está disponible temporalmente.")
+            st.code(expl) # Mostramos el error técnico (ej. 402 Payment Required)
         else:
+            # Aquí entra solo si hay recomendación válida
             col_r1, col_r2 = st.columns([1, 2])
             with col_r1:
                 st.markdown("#### 🚿 Decisión")
-                # Ahora es seguro llamar a .get()
                 do_irrigate = reco.get("apply_irrigation", False)
-                
                 if do_irrigate:
                     st.success("APLICAR RIEGO")
                 else:
