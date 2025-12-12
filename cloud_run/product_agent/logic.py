@@ -92,7 +92,7 @@ def build_product_agent_payload(body: Dict[str, Any]) -> Dict[str, Any]:
         "farmer_notes": farmer_notes,
         "daily_features_last_days": daily_features,
         "recent_timeseries_last_hours": recent_ts,
-        "irrigation_recommendation": irrigation_output  # Input clave
+        "irrigation_recommendation": irrigation_output,  # Input clave
         "catalog_context": load_catalog_as_text()
     }
     return payload
