@@ -19,7 +19,7 @@ def _try_parse_json(raw: str) -> Optional[Dict[str, Any]]:
     except json.JSONDecodeError:
         return None
 
-def call_irrigation_agent_hf(
+def call_product_agent_hf(
     payload: Dict[str, Any],
     rag_context_text: Optional[str] = None,
 ) -> Dict[str, Any]:
