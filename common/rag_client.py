@@ -53,29 +53,42 @@ def _load_rag_resources() -> None:
 
 def _hf_embed(text: str) -> np.ndarray:
     """
-    Obtiene el embedding de un texto usando la API unificada de Hugging Face.
-    Usa el mismo HF_TOKEN pero con el endpoint /v1/embeddings.
+    Obtiene el embedding de un texto usando la API NATIVA de Hugging Face.
+    Es más estable que el endpoint /v1/embeddings para cuentas gratuitas.
     """
     if not HF_TOKEN:
         raise RuntimeError("HF_TOKEN no está configurado; no se pueden obtener embeddings.")
 
-    api_url = "https://router.huggingface.co/v1/embeddings"
+    # Usamos el endpoint directo del modelo
+    api_url = f"https://api-inference.huggingface.co/models/{HF_EMBED_MODEL_ID}"
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
         "Content-Type": "application/json",
     }
 
-    body = {
-        "model": HF_EMBED_MODEL_ID,
-        "input": text,
-    }
+    # La API nativa prefiere recibir una lista para evitar ambigüedades
+    body = {"inputs": [text]}
 
     resp = requests.post(api_url, headers=headers, json=body, timeout=60)
     resp.raise_for_status()
     data = resp.json()
 
-    emb = data["data"][0]["embedding"]
-    return np.array(emb, dtype="float32")
+    # Verificación de errores que a veces vienen como JSON 200 OK
+    if isinstance(data, dict) and "error" in data:
+        raise RuntimeError(f"Error HF API: {data['error']}")
+
+    # La respuesta para inputs=[text] es una lista de listas: [[0.1, 0.2, ...]]
+    # Tomamos el primer elemento
+    if isinstance(data, list) and len(data) > 0:
+        emb = data[0]
+        # Aseguramos que sea una lista de floats (a veces la API anida diferente)
+        if isinstance(emb, list):
+            return np.array(emb, dtype="float32")
+            
+    # Fallback por si la estructura cambia
+    print(f"[DEBUG] Estructura inesperada de embeddings: {type(data)}")
+    # Intentamos convertir lo que llegue
+    return np.array(data, dtype="float32")
 
 
 def rag_retrieve(query: str, k: Optional[int] = None) -> List[Dict[str, Any]]:
