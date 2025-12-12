@@ -2,33 +2,30 @@ import streamlit as st
 import requests
 import pandas as pd
 import json
-import datetime as dt
+import os
 
 # ==========================
 # CONFIGURACIÓN
 # ==========================
 st.set_page_config(page_title="Agro-IA: Riego y Manejo", page_icon="🌿", layout="wide")
 
-# URLs de los servicios (Idealmente en st.secrets)
-IRRIGATION_URL = st.secrets.get("irrigation_url", "URL_DE_TU_IRRIGATION_AGENT_AQUI") 
-PRODUCT_URL = st.secrets.get("product_url", "URL_DE_TU_PRODUCT_AGENT_AQUI")
+# Intenta leer de variables de entorno (Cloud Run), si no, busca en st.secrets (Local)
+IRRIGATION_URL = os.getenv("IRRIGATION_URL") or st.secrets.get("irrigation_url")
+PRODUCT_URL = os.getenv("PRODUCT_URL") or st.secrets.get("product_url")
 
-# Si no están en secrets, úsalas hardcodeadas temporalmente para probar
-# IRRIGATION_URL = "https://irrigation-agent-..."
-# PRODUCT_URL = "https://product-agent-..."
+if not IRRIGATION_URL or "URL_DE_TU" in IRRIGATION_URL:
+    st.error("❌ Falta configurar la URL del Agente de Riego (IRRIGATION_URL)")
+    st.stop()
 
 # ==========================
-# FUNCIONES AUXILIARES (VISUALIZACIÓN)
+# FUNCIONES AUXILIARES
 # ==========================
 
 def parse_timeseries_to_df(ts_data):
-    """Convierte el JSON de series temporales en un DataFrame ancho para st.line_chart"""
     if not ts_data or "metrics" not in ts_data:
         return pd.DataFrame()
     
-    metrics = ts_data["metrics"] # Diccionario { "RF": [{ts, val}...], "T_in": ... }
-    
-    # Estrategia: Crear un DF por métrica y luego hacer merge/join por timestamp
+    metrics = ts_data["metrics"]
     dfs = []
     for metric_name, values in metrics.items():
         if not values:
@@ -42,18 +39,14 @@ def parse_timeseries_to_df(ts_data):
     if not dfs:
         return pd.DataFrame()
         
-    # Unir todos en un solo DF ancho
-    df_final = pd.concat(dfs, axis=1).sort_index()
-    return df_final
+    return pd.concat(dfs, axis=1).sort_index()
 
 def render_quality_indicator(data_context):
-    """Muestra semáforos de calidad de datos (Historia 2.3)"""
     ts = data_context.get("recent_timeseries", {}).get("metrics", {})
     daily = data_context.get("daily_features", [])
     
     col1, col2, col3 = st.columns(3)
     
-    # 1. Disponibilidad Sensores (Check rápido si hay datos recientes)
     has_data = any(len(v) > 0 for v in ts.values())
     with col1:
         if has_data:
@@ -61,7 +54,6 @@ def render_quality_indicator(data_context):
         else:
             st.error("📡 Sin conexión Sensores")
             
-    # 2. Consistencia Histórica
     days_count = len(daily)
     with col2:
         if days_count >= 5:
@@ -71,7 +63,6 @@ def render_quality_indicator(data_context):
         else:
             st.error("📅 Sin histórico diario")
 
-    # 3. Latencia (Fake check para demo, se podría calcular real)
     with col3:
         st.info("⏱️ Latencia: < 5min")
 
@@ -82,7 +73,6 @@ def render_quality_indicator(data_context):
 st.title("🌿 Sistema Integral de Gestión Agrícola (S4)")
 st.markdown("Orquestación de Agentes: **Ingeniería Hidráulica** + **Manejo de Productos**")
 
-# --- SIDEBAR: PARÁMETROS ---
 with st.sidebar:
     st.header("📋 Configuración de Parcela")
     with st.form("params_form"):
@@ -99,12 +89,9 @@ with st.sidebar:
         
         submitted = st.form_submit_button("🔄 GENERAR ESTRATEGIA", type="primary")
 
-# --- LOGICA PRINCIPAL AL PULSAR BOTÓN ---
 if submitted:
-    # Contenedores para resultados
     tab_dashboard, tab_riego, tab_productos = st.tabs(["📊 Monitorización (Datos)", "💧 Recomendación Riego", "🧪 Plan Productos"])
     
-    # Payload base
     user_context = {
         "crop": {"species": crop_species, "phenological_stage": crop_stage},
         "soil": {
@@ -118,141 +105,139 @@ if submitted:
         "farmer_notes": farmer_notes
     }
 
-    # ---------------------------------------------------------
-    # 1. LLAMADA AGENTE RIEGO (Hydraulic Engineer)
-    # ---------------------------------------------------------
-    with st.spinner("🤖 Agente de Riego analizando sensores y calculando balance hídrico..."):
+    # --- LLAMADA RIEGO ---
+    irrigation_reco = {}
+    raw_data = {}
+    
+    with st.spinner("🤖 Agente de Riego analizando sensores..."):
         try:
             r_irrigation = requests.post(IRRIGATION_URL, json=payload_riego, timeout=120)
             r_irrigation.raise_for_status()
             data_irrigation = r_irrigation.json()
             
-            # Separar respuesta IA de datos crudos
-            irrigation_reco = data_irrigation.get("agent_response", {})
-            raw_data = data_irrigation.get("data_context", {})
+            irrigation_reco = data_irrigation.get("agent_response", {}) or {} # <--- Aseguramos dict
+            raw_data = data_irrigation.get("data_context", {}) or {}
             
         except Exception as e:
-            st.error(f"Error fatal en Agente de Riego: {e}")
-            st.stop()
+            st.error(f"Error conectando con Agente de Riego: {e}")
+            # No detenemos la ejecución para intentar mostrar al menos los datos parciales
+            irrigation_reco = {"explanation": f"Fallo de conexión: {e}"}
 
-    # ---------------------------------------------------------
-    # 2. LLAMADA AGENTE PRODUCTOS (Agronomist)
-    # ---------------------------------------------------------
-    # Le pasamos lo que dijo el de riego + las notas
+    # --- LLAMADA PRODUCTOS ---
     payload_productos = {
         "context_overrides": user_context,
         "farmer_notes": farmer_notes,
-        # INYECCIÓN CLAVE: El output del primero es input del segundo
         "irrigation_recommendation": irrigation_reco 
     }
     
-    with st.spinner("💊 Agente de Productos consultando Vademécum y Fichas Técnicas..."):
+    data_products = {}
+    with st.spinner("💊 Agente de Productos consultando Vademécum..."):
         try:
             r_product = requests.post(PRODUCT_URL, json=payload_productos, timeout=120)
             r_product.raise_for_status()
             data_products = r_product.json()
         except Exception as e:
-            st.warning(f"No se pudo conectar con el Agente de Productos: {e}")
-            data_products = {}
+            st.warning(f"Agente de Productos no disponible: {e}")
 
-    # ---------------------------------------------------------
-    # PESTAÑA 1: DASHBOARD & DATOS (ÉPICA 2)
-    # ---------------------------------------------------------
+    # --- PESTAÑA 1: DASHBOARD ---
     with tab_dashboard:
-        st.markdown("### 📡 Estado de los Sensores (Últimas 24h)")
+        st.markdown("### 📡 Estado de los Sensores")
         render_quality_indicator(raw_data)
         
-        # Procesar Series Temporales
         df_ts = parse_timeseries_to_df(raw_data.get("recent_timeseries", {}))
         
         if not df_ts.empty:
-            # Gráfica 1: Humedad de Suelo (VWC)
             cols_vwc = [c for c in df_ts.columns if "VWC" in c]
             if cols_vwc:
-                st.markdown("#### 💧 Dinámica de Humedad de Suelo (%)")
+                st.markdown("#### 💧 Humedad de Suelo (%)")
                 st.line_chart(df_ts[cols_vwc], height=300)
             
-            # Gráfica 2: Clima (Temp/Humedad)
             col_graph1, col_graph2 = st.columns(2)
             with col_graph1:
                 st.markdown("#### 🌡️ Temperatura Interna")
                 if "T_in" in df_ts.columns:
                     st.line_chart(df_ts[["T_in"]], height=200, color="#FF4B4B")
             with col_graph2:
-                st.markdown("#### ☀️ Radiación / Luz")
+                st.markdown("#### ☀️ Radiación")
                 if "RF" in df_ts.columns:
                     st.line_chart(df_ts[["RF"]], height=200, color="#FFA500")
         else:
-            st.info("No hay datos de series temporales disponibles para visualizar.")
+            st.info("Sin datos recientes de sensores.")
 
         st.divider()
-        st.markdown("### 📈 Tendencias Diarias (Últimos 7 días)")
+        st.markdown("### 📈 Tendencias Diarias")
         daily_list = raw_data.get("daily_features", [])
         if daily_list:
             df_daily = pd.DataFrame(daily_list)
             if "fecha" in df_daily.columns:
                 df_daily = df_daily.set_index("fecha")
-            st.dataframe(df_daily, use_container_width=True)
+            
+            # <--- CAMBIO: Solución error use_container_width
+            # Usamos una configuración compatible o simplemente .dataframe(df) sin argumentos extraños
+            try:
+                st.dataframe(df_daily, use_container_width=True)
+            except:
+                # Fallback por si la versión de streamlit se queja
+                st.dataframe(df_daily) 
         else:
             st.info("No hay features diarias disponibles.")
 
-    # ---------------------------------------------------------
-    # PESTAÑA 2: RECOMENDACIÓN RIEGO
-    # ---------------------------------------------------------
+    # --- PESTAÑA 2: RIEGO ---
     with tab_riego:
-        reco = irrigation_reco.get("recommendation", {})
-        expl = irrigation_reco.get("explanation", "Sin explicación")
+        # <--- CAMBIO CRÍTICO: Protección contra None
+        # Si recommendation es None, asignamos un dict vacío {}
+        reco = irrigation_reco.get("recommendation") or {} 
+        expl = irrigation_reco.get("explanation", "Sin explicación disponible.")
         
-        col_r1, col_r2 = st.columns([1, 2])
-        with col_r1:
-            st.markdown("#### 🚿 Decisión")
-            do_irrigate = reco.get("apply_irrigation", False)
-            if do_irrigate:
-                st.success("APLICAR RIEGO")
-            else:
-                st.info("NO REGAR")
-            
-            st.metric("Volumen Sugerido", f"{reco.get('suggested_water_l_m2', 0)} L/m²")
-            st.markdown(f"**Estrategia:** {reco.get('reason', '-')}")
-            
-        with col_r2:
-            st.markdown("#### 📝 Justificación Técnica")
-            st.info(expl)
-        
-        st.markdown("#### 🕒 Programación de Ciclos")
-        cycles = reco.get("suggested_cycles", [])
-        if cycles:
-            st.table(pd.DataFrame(cycles))
+        if not reco:
+            st.error("⚠️ El Agente de Riego no pudo generar una recomendación válida (posible error del modelo).")
+            st.write("**Detalle del error:**", expl)
         else:
-            st.write("Sin ciclos definidos.")
+            col_r1, col_r2 = st.columns([1, 2])
+            with col_r1:
+                st.markdown("#### 🚿 Decisión")
+                # Ahora es seguro llamar a .get()
+                do_irrigate = reco.get("apply_irrigation", False)
+                
+                if do_irrigate:
+                    st.success("APLICAR RIEGO")
+                else:
+                    st.info("NO REGAR")
+                
+                st.metric("Volumen", f"{reco.get('suggested_water_l_m2', 0)} L/m²")
+                st.markdown(f"**Estrategia:** {reco.get('reason', '-')}")
+                
+            with col_r2:
+                st.markdown("#### 📝 Justificación")
+                st.info(expl)
             
-        if reco.get("warnings"):
-            st.warning("⚠️ **Alertas Hidráulicas:** " + "; ".join(reco["warnings"]))
+            st.markdown("#### 🕒 Ciclos")
+            cycles = reco.get("suggested_cycles", [])
+            if cycles:
+                st.table(pd.DataFrame(cycles))
+            else:
+                st.caption("Sin ciclos específicos.")
+                
+            if reco.get("warnings"):
+                for w in reco["warnings"]:
+                    st.warning(f"⚠️ {w}")
 
-    # ---------------------------------------------------------
-    # PESTAÑA 3: PLAN DE PRODUCTOS
-    # ---------------------------------------------------------
+    # --- PESTAÑA 3: PRODUCTOS ---
     with tab_productos:
         prod_plan = data_products.get("product_plan", [])
         advice = data_products.get("agronomic_advice", "")
         
-        st.markdown("### 🧪 Estrategia de Nutrición y Bioestimulación")
-        st.caption("Basado en Catálogo Atlántica Agrícola + Estado Hídrico")
-        
+        st.markdown("### 🧪 Estrategia de Nutrición")
         st.write(advice)
         
         if prod_plan:
-            st.markdown("#### 📦 Canasta de Productos Recomendada")
-            # Mostrar como tarjetas o tabla bonita
             for prod in prod_plan:
-                with st.expander(f"🧴 **{prod.get('product_name')}** ({prod.get('dose')})", expanded=True):
-                    col_p1, col_p2 = st.columns(2)
-                    with col_p1:
-                        st.markdown(f"**Momento:** {prod.get('application_timing')}")
-                    with col_p2:
-                        st.markdown(f"**Objetivo:** {prod.get('reason')}")
+                with st.expander(f"🧴 **{prod.get('product_name')}**", expanded=True):
+                    st.write(f"**Dosis:** {prod.get('dose')}")
+                    st.write(f"**Momento:** {prod.get('application_timing')}")
+                    st.caption(f"**Objetivo:** {prod.get('reason')}")
         else:
-            st.info("No se requieren productos específicos para esta jornada o el modelo no encontró coincidencias.")
+            st.info("No hay productos recomendados.")
 
 else:
-    st.info("👈 Configura los parámetros en la barra lateral y pulsa 'Generar Estrategia' para iniciar el análisis.")
+    st.info("👈 Pulsa 'Generar Estrategia' para comenzar.")
