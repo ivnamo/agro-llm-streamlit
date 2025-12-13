@@ -6,6 +6,7 @@ import time
 import os
 import datetime
 from google.cloud import bigquery
+from google.oauth2 import service_account
 
 # ==========================
 # 0. DATOS MOCK
@@ -46,39 +47,62 @@ DATASET_ID = "agro_data"
 if not IRRIGATION_URL: st.error("❌ Falta URL."); st.stop()
 
 # ==========================
-# FUNCIONES BQ (CORREGIDAS)
+# FUNCIONES BQ (AUTENTICACIÓN SEGURA)
 # ==========================
+def get_bq_client():
+    """
+    Intenta conectar a BQ usando st.secrets (Producción en Streamlit Cloud)
+    o credenciales por defecto (Local/Cloud Run).
+    """
+    try:
+        # Intenta leer el bloque [gcp_service_account] de los secretos
+        if "gcp_service_account" in st.secrets:
+            creds = service_account.Credentials.from_service_account_info(
+                st.secrets["gcp_service_account"]
+            )
+            return bigquery.Client(credentials=creds, project=PROJECT_ID)
+    except Exception:
+        pass
+    
+    # Fallback: Si no hay secretos, intenta autenticación por entorno (útil si lo corres en local con gcloud auth)
+    return bigquery.Client(project=PROJECT_ID)
+
 def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
-    """Guarda el feedback. Pasa el dict directo al campo JSON."""
-    client = bigquery.Client(project=PROJECT_ID)
-    table_id = f"{PROJECT_ID}.{DATASET_ID}.recommendation_history"
-    row = {
-        "timestamp": datetime.datetime.utcnow().isoformat(),
-        "location_id": 8507,
-        "rating": rating,
-        "user_feedback": feedback_text,
-        "accepted": accepted,
-        "full_audit_log": audit_log  # <--- PASAMOS EL DICT, NO STRING (El cliente BQ lo maneja)
-    }
-    errors = client.insert_rows_json(table_id, [row])
-    if errors: st.error(f"Error BQ: {errors}")
-    else: st.toast("✅ Feedback guardado correctamente", icon="💾")
+    try:
+        client = get_bq_client() # <--- Usamos el cliente autenticado
+        table_id = f"{PROJECT_ID}.{DATASET_ID}.recommendation_history"
+        row = {
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "location_id": 8507,
+            "rating": rating,
+            "user_feedback": feedback_text,
+            "accepted": accepted,
+            "full_audit_log": audit_log 
+        }
+        errors = client.insert_rows_json(table_id, [row])
+        if errors: st.error(f"Error BQ: {errors}")
+        else: st.toast("✅ Feedback guardado correctamente", icon="💾")
+    except Exception as e:
+        st.error(f"Error de conexión BQ: {e}")
 
 def load_history_from_bq(selected_date=None):
-    """Carga historial filtrado por fecha."""
-    client = bigquery.Client(project=PROJECT_ID)
-    where_clause = ""
-    if selected_date:
-        where_clause = f"WHERE DATE(timestamp) = '{selected_date.strftime('%Y-%m-%d')}'"
-    
-    q = f"""
-        SELECT timestamp, rating, user_feedback, full_audit_log, accepted 
-        FROM `{PROJECT_ID}.{DATASET_ID}.recommendation_history`
-        {where_clause}
-        ORDER BY timestamp DESC
-        LIMIT 50
-    """
-    return client.query(q).to_dataframe()
+    try:
+        client = get_bq_client() # <--- Usamos el cliente autenticado
+        where_clause = ""
+        if selected_date:
+            where_clause = f"WHERE DATE(timestamp) = '{selected_date.strftime('%Y-%m-%d')}'"
+        
+        q = f"""
+            SELECT timestamp, rating, user_feedback, full_audit_log, accepted 
+            FROM `{PROJECT_ID}.{DATASET_ID}.recommendation_history`
+            {where_clause}
+            ORDER BY timestamp DESC
+            LIMIT 50
+        """
+        return client.query(q).to_dataframe()
+    except Exception as e:
+        st.error(f"Error leyendo historial: {e}")
+        return pd.DataFrame()
 
 # ==========================
 # HELPERS
@@ -112,9 +136,7 @@ def render_quality_indicator(data_context):
 # ==========================
 st.title("🌿 Sistema Integral de Gestión Agrícola (S4)")
 
-# Inicializar Estado (Persistencia)
-if "results" not in st.session_state:
-    st.session_state.results = None # Aquí guardaremos todo el output de los agentes
+if "results" not in st.session_state: st.session_state.results = None
 
 with st.sidebar:
     st.header("📋 Configuración")
@@ -130,12 +152,9 @@ with st.sidebar:
     use_str = st.toggle("Agente Estrés", True)
     use_prod = st.toggle("Agente Productos", True)
 
-# --- LÓGICA DE EJECUCIÓN (SOLO CORRE AL PULSAR EL BOTÓN) ---
 if submitted:
     ctx = {"crop": {"species": crop, "phenological_stage": stage}}
     base = {"context_overrides": ctx, "farmer_notes": notes}
-    
-    # Variables temporales
     irr_resp, str_resp, prod_resp, raw_riego = {}, {}, {}, {}
 
     with st.status("🤖 Coordinando Agentes...", expanded=True) as s:
@@ -172,35 +191,22 @@ if submitted:
             time.sleep(0.5); prod_resp = MOCK_PRODUCT_DATA
         
         s.update(label="¡Completado!", state="complete", expanded=False)
-        
-        # GUARDAMOS EN SESSION STATE PARA QUE NO SE BORRE AL INTERACTUAR
         st.session_state.results = {
-            "irrigation": irr_resp,
-            "raw_riego": raw_riego,
-            "stress": str_resp,
-            "product": prod_resp,
+            "irrigation": irr_resp, "raw_riego": raw_riego,
+            "stress": str_resp, "product": prod_resp,
             "audit": prod_resp.get("audit_log", {})
         }
 
-# --- RENDERIZADO (SE EJECUTA SIEMPRE SI HAY DATOS EN MEMORIA) ---
 tab_dash, tab_riego, tab_estres, tab_prod, tab_hist = st.tabs(["📊 Monitor", "💧 Riego", "🌡️ Estrés", "🧪 Plan & Feedback", "📜 Historial"])
 
-# Si tenemos resultados en memoria, pintamos las pestañas 1-4
 if st.session_state.results:
     res = st.session_state.results
     
-    # TAB 1: DASHBOARD
     with tab_dash:
         render_quality_indicator(res["raw_riego"])
         df = parse_timeseries_to_df(res["raw_riego"].get("recent_timeseries", {}))
-        if not df.empty:
-            if [c for c in df.columns if "VWC" in c]: st.line_chart(df[[c for c in df.columns if "VWC" in c]], height=250)
-            c1, c2 = st.columns(2)
-            if "T_in" in df.columns: c1.line_chart(df[["T_in"]], height=200, color="#FF4B4B")
-            if "RF" in df.columns: c2.line_chart(df[["RF"]], height=200, color="#FFA500")
-        else: st.info("Sin datos sensores.")
-
-    # TAB 2: RIEGO
+        if not df.empty and [c for c in df.columns if "VWC" in c]: st.line_chart(df[[c for c in df.columns if "VWC" in c]], height=250)
+        
     with tab_riego:
         rec = res["irrigation"].get("recommendation", {})
         if rec:
@@ -211,10 +217,8 @@ if st.session_state.results:
                 st.metric("Volumen", f"{rec.get('suggested_water_l_m2', 0)} L/m²")
             with c2: st.info(res["irrigation"].get("explanation", "-"))
             if rec.get("suggested_cycles"): st.table(rec["suggested_cycles"])
-            for w in rec.get("warnings", []): st.warning(w)
-        else: st.error("Sin datos Riego.")
+        else: st.error("Sin datos.")
 
-    # TAB 3: ESTRÉS
     with tab_estres:
         alert = res["stress"].get("stress_alert", {})
         if alert:
@@ -227,7 +231,6 @@ if st.session_state.results:
             c2.markdown("**🦠 Sanidad**"); c2.write(res["stress"].get("recommendations", {}).get("sanitary_alert"))
         else: st.info("Sin alertas.")
 
-    # TAB 4: PRODUCTOS & FEEDBACK
     with tab_prod:
         plan = res["product"].get("product_plan", [])
         st.markdown("### 🧪 Estrategia")
@@ -241,7 +244,6 @@ if st.session_state.results:
             st.divider()
             with st.expander("👁️ Ver/Copiar JSON Técnico"): 
                 st.code(json.dumps(res["audit"], indent=2, ensure_ascii=False), language="json")
-            
             st.divider()
             st.markdown("### ⭐ Valoración")
             with st.form("fb"):
@@ -249,36 +251,27 @@ if st.session_state.results:
                 rat = c1.slider("Nota", 1, 5, 3)
                 acc = c1.checkbox("Aceptado", True)
                 txt = c2.text_area("Comentarios")
-                # Al pulsar esto, se recarga la página, pero como usamos st.session_state.results, todo sigue ahí
                 if st.form_submit_button("💾 Guardar"):
                     save_feedback_to_bq(res["audit"], rat, txt, acc)
 
 else:
     with tab_dash: st.info("👈 Pulsa 'Ejecutar Análisis' para ver datos.")
 
-# TAB 5: HISTORIAL (Siempre visible)
 with tab_hist:
     c_date, c_btn = st.columns([1, 3])
     sel_date = c_date.date_input("Filtrar Fecha", value=None)
     
     if st.button("🔄 Cargar Historial"):
-        try:
-            df = load_history_from_bq(selected_date=sel_date)
-            if not df.empty:
-                for i, r in df.iterrows():
-                    # Formato estrellas
-                    stars = "⭐" * int(r['rating'])
-                    status = "✅ Aceptado" if r['accepted'] else "❌ Rechazado"
-                    with st.expander(f"{r['timestamp']} | {stars} | {status}"):
-                        st.write(f"**Feedback:** {r['user_feedback']}")
-                        # BQ devuelve el JSON parseado si el campo es tipo JSON, o string si es STRING
-                        # Intentamos parsear por si acaso
-                        log_data = r['full_audit_log']
-                        if isinstance(log_data, str): log_data = json.loads(log_data)
-                        
-                        st.table(pd.DataFrame(log_data.get("ai_reasoning_output", {}).get("product_plan", [])))
-                        if st.checkbox("JSON Completo", key=f"h_{i}"): st.json(log_data)
-            else:
-                st.warning("No hay registros para esta fecha.")
-        except Exception as e:
-            st.error(f"Error cargando historial: {e}")
+        df = load_history_from_bq(selected_date=sel_date)
+        if not df.empty:
+            for i, r in df.iterrows():
+                stars = "⭐" * int(r['rating'])
+                status = "✅ Aceptado" if r['accepted'] else "❌ Rechazado"
+                with st.expander(f"{r['timestamp']} | {stars} | {status}"):
+                    st.write(f"**Feedback:** {r['user_feedback']}")
+                    log_data = r['full_audit_log']
+                    if isinstance(log_data, str): log_data = json.loads(log_data)
+                    st.table(pd.DataFrame(log_data.get("ai_reasoning_output", {}).get("product_plan", [])))
+                    if st.checkbox("JSON Completo", key=f"h_{i}"): st.json(log_data)
+        else:
+            st.warning("No hay registros.")
