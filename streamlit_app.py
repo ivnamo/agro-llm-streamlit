@@ -10,11 +10,11 @@ from google.cloud import bigquery
 from google.oauth2 import service_account
 
 # ==========================
-# 0. CONFIGURACIÓN Y MOCKS
+# CONFIGURACIÓN
 # ==========================
 st.set_page_config(page_title="Agro-IA: S4 Invernadero", page_icon="🌿", layout="wide")
 
-# DATOS MOCK
+# MOCKS
 MOCK_IRRIGATION_DATA = {
     "agent_response": {
         "recommendation": {
@@ -36,70 +36,59 @@ MOCK_PRODUCT_DATA = {
     "audit_log": {"mock": True, "info": "Log simulado"}
 }
 
-# Variables de entorno
 IRRIGATION_URL = os.getenv("IRRIGATION_URL") or st.secrets.get("irrigation_url")
 PRODUCT_URL = os.getenv("PRODUCT_URL") or st.secrets.get("product_url")
 STRESS_URL = os.getenv("STRESS_URL") or st.secrets.get("stress_url")
 PROJECT_ID = "tfg-agro-llm"
 DATASET_ID = "agro_data"
 
+# ⚠️ LA CLAVE DEL ÉXITO: FORZAR LA REGIÓN DE MADRID
+BQ_LOCATION = "europe-southwest1" 
+
 if not IRRIGATION_URL: st.error("❌ Falta URL."); st.stop()
 
 # ==========================
-# GESTIÓN DE ERRORES PERSISTENTE
+# LOGS
 # ==========================
-if "debug_logs" not in st.session_state:
-    st.session_state.debug_logs = []
+if "debug_logs" not in st.session_state: st.session_state.debug_logs = []
 
 def add_log(msg, type="info"):
-    """Guarda logs en memoria para que no se borren al refrescar"""
     ts = datetime.datetime.now().strftime("%H:%M:%S")
     st.session_state.debug_logs.append({"ts": ts, "msg": msg, "type": type})
 
 # ==========================
-# FUNCIONES BQ (A PRUEBA DE BOMBAS)
+# FUNCIONES BQ (CON REGIÓN MADRID)
 # ==========================
 def get_bq_client():
-    add_log("Intentando crear cliente BigQuery...", "info")
-    
-    # 1. Intentar Secrets
+    # Intentar Secrets
     if "gcp_service_account" in st.secrets:
         try:
             creds = service_account.Credentials.from_service_account_info(
                 st.secrets["gcp_service_account"]
             )
-            add_log("Credenciales leídas de st.secrets correctamente.", "success")
-            return bigquery.Client(credentials=creds, project=PROJECT_ID)
+            # AQUÍ ESTÁ EL FIX: location=BQ_LOCATION
+            return bigquery.Client(credentials=creds, project=PROJECT_ID, location=BQ_LOCATION)
         except Exception as e:
-            add_log(f"Error creando credenciales desde secrets: {str(e)}", "error")
+            add_log(f"Error credenciales: {e}", "error")
             return None
 
-    # 2. Intentar Local
+    # Intentar Local
     try:
-        add_log("Buscando credenciales por defecto (entorno)...", "warning")
-        return bigquery.Client(project=PROJECT_ID)
+        return bigquery.Client(project=PROJECT_ID, location=BQ_LOCATION)
     except Exception as e:
-        add_log(f"Fallo total autenticación: {str(e)}", "error")
+        add_log(f"Error local: {e}", "error")
         return None
 
 def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
-    add_log("--- INICIO PROCESO DE GUARDADO ---", "info")
-    
     client = get_bq_client()
-    if not client:
-        add_log("No hay cliente BQ. Abortando.", "error")
-        return
+    if not client: return
 
     table_id = f"{PROJECT_ID}.{DATASET_ID}.recommendation_history"
-    add_log(f"Tabla destino: {table_id}", "info")
-
+    
     try:
-        # 1. Limpieza: Aseguramos que sea un diccionario serializable (quitando fechas raras)
-        audit_clean_dict = json.loads(json.dumps(audit_log, default=str))
-        
-        # 2. TRUCO FINAL: Convertir a STRING para que BigQuery no lo confunda con un RECORD
-        # Si tu columna en BQ es JSON, a veces prefiere recibir el string serializado.
-        audit_as_string = json.dumps(audit_clean_dict)
+        # Sanitizar y convertir a String para evitar error "Not a record"
+        audit_clean = json.loads(json.dumps(audit_log, default=str))
+        audit_str = json.dumps(audit_clean)
 
         row = {
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -107,33 +96,33 @@ def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
             "rating": rating,
             "user_feedback": feedback_text,
             "accepted": accepted,
-            "full_audit_log": audit_as_string # <--- AQUÍ ESTÁ EL CAMBIO (Enviamos String)
+            "full_audit_log": audit_str # String JSON
         }
-        
-        add_log("Enviando fila a BigQuery...", "info")
-        
-        # Debug: ver qué enviamos
-        # st.write(row) 
         
         errors = client.insert_rows_json(table_id, [row])
         
         if errors == []:
-            add_log("✅ ¡INSERT EXITOSO! BigQuery devolvió OK.", "success")
+            add_log("✅ Guardado OK en BigQuery.", "success")
             st.toast("Guardado OK", icon="🎉")
         else:
-            add_log(f"❌ BigQuery rechazó los datos: {errors}", "error")
-            # Si falla de nuevo, prueba a cambiar 'full_audit_log' por audit_clean_dict (el dict)
-            # pero el error anterior sugería que quería string o había conflicto de tipos.
+            add_log(f"❌ Error BigQuery: {errors}", "error")
 
     except Exception as e:
-        add_log(f"💥 EXCEPCIÓN PYTHON: {str(e)}", "error")
-        add_log(traceback.format_exc(), "error")
+        add_log(f"💥 Error Python: {e}", "error")
+
 def load_history_from_bq(selected_date=None):
     client = get_bq_client()
     if not client: return pd.DataFrame()
     
     where = f"WHERE DATE(timestamp) = '{selected_date.strftime('%Y-%m-%d')}'" if selected_date else ""
-    q = f"SELECT timestamp, rating, user_feedback, full_audit_log, accepted FROM `{PROJECT_ID}.{DATASET_ID}.recommendation_history` {where} ORDER BY timestamp DESC LIMIT 20"
+    
+    # IMPORTANTE: El cliente ahora sabe que debe buscar en 'europe-southwest1'
+    q = f"""
+        SELECT timestamp, rating, user_feedback, full_audit_log, accepted 
+        FROM `{PROJECT_ID}.{DATASET_ID}.recommendation_history` 
+        {where} 
+        ORDER BY timestamp DESC LIMIT 20
+    """
     
     try:
         return client.query(q).to_dataframe()
@@ -142,71 +131,68 @@ def load_history_from_bq(selected_date=None):
         return pd.DataFrame()
 
 # ==========================
-# UI PRINCIPAL
+# UI
 # ==========================
-st.title("🌿 Sistema Integral (Modo Debug)")
-
-# ZONA DE DEBUG VISIBLE SIEMPRE
-with st.expander("🛠️ CONSOLA DE DEPURACIÓN (Ver aquí si falla)", expanded=True):
-    if st.button("Limpiar Logs"): st.session_state.debug_logs = []
-    for log in st.session_state.debug_logs:
-        if log["type"] == "error": st.error(f"[{log['ts']}] {log['msg']}")
-        elif log["type"] == "success": st.success(f"[{log['ts']}] {log['msg']}")
-        elif log["type"] == "warning": st.warning(f"[{log['ts']}] {log['msg']}")
-        else: st.info(f"[{log['ts']}] {log['msg']}")
-
-# Estado
-if "results" not in st.session_state: st.session_state.results = None
+st.title("🌿 Sistema Integral (S4)")
 
 with st.sidebar:
     st.header("📋 Configuración")
     with st.form("params"):
         submitted = st.form_submit_button("🔄 EJECUTAR ANÁLISIS")
+    use_mock = st.toggle("Usar Mocks", True)
     
-    use_mock = st.toggle("Usar Mocks (Ahorrar Tokens)", True)
+    st.divider()
+    with st.expander("🛠️ Logs"):
+        if st.button("Limpiar"): st.session_state.debug_logs = []
+        for l in st.session_state.debug_logs:
+            st.text(f"[{l['ts']}] {l['msg']}")
+
+if "results" not in st.session_state: st.session_state.results = None
 
 if submitted:
-    # Lógica simplificada para probar el guardado
-    add_log("Análisis ejecutado.", "info")
     if use_mock:
         st.session_state.results = {
             "irrigation": MOCK_IRRIGATION_DATA,
             "product": MOCK_PRODUCT_DATA,
             "audit": MOCK_PRODUCT_DATA["audit_log"]
         }
-        add_log("Datos Mock cargados.", "success")
-    else:
-        # Aquí irían tus llamadas reales
-        pass
+        add_log("Mock generado.", "info")
 
 tab_plan, tab_hist = st.tabs(["🧪 Plan & Feedback", "📜 Historial"])
 
-# PESTAÑA FEEDBACK
 with tab_plan:
     if st.session_state.results:
         res = st.session_state.results
-        st.json(res["audit"])
+        st.info("Plan generado (Mock/Real).")
         
         st.divider()
-        st.subheader("Guardar Feedback")
-        
-        # FORMULARIO
-        with st.form("fb_form"):
-            rating = st.slider("Nota", 1, 5, 5)
-            txt = st.text_area("Comentario", "Test debug")
-            accepted = st.checkbox("Aceptado", True)
+        st.subheader("⭐ Tu Opinión")
+        with st.form("fb"):
+            c1, c2 = st.columns(2)
+            rating = c1.slider("Nota", 1, 5, 5)
+            accepted = c1.checkbox("Aceptar", True)
+            txt = c2.text_area("Comentarios", "Funciona region madrid")
             
-            # AL PULSAR GUARDAR
-            if st.form_submit_button("💾 GUARDAR EN BIGQUERY"):
+            if st.form_submit_button("💾 Guardar"):
                 save_feedback_to_bq(res["audit"], rating, txt, accepted)
-    else:
-        st.info("Ejecuta el análisis primero.")
 
-# PESTAÑA HISTORIAL
 with tab_hist:
-    if st.button("🔄 Refrescar Tabla"):
+    if st.button("🔄 Refrescar Historial"):
         df = load_history_from_bq()
         if not df.empty:
-            st.dataframe(df)
+            for i, r in df.iterrows():
+                stars = "⭐" * int(r['rating'])
+                status = "✅" if r['accepted'] else "❌"
+                
+                with st.expander(f"{r['timestamp']} | {stars} | {status}"):
+                    st.write(f"**Feedback:** {r['user_feedback']}")
+                    
+                    # Parseo seguro del JSON
+                    log_data = r['full_audit_log']
+                    if isinstance(log_data, str):
+                        try: log_data = json.loads(log_data)
+                        except: pass
+                    
+                    st.json(log_data)
         else:
-            st.warning("Tabla vacía o error de lectura (mira los logs arriba).")
+            st.warning("No hay datos (revisa si la fecha coincide o si el log muestra error).")
