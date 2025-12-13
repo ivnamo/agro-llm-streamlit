@@ -8,7 +8,7 @@ import datetime
 from google.cloud import bigquery
 
 # ==========================
-# 0. DATOS MOCK (LOREM IPSUM)
+# 0. DATOS MOCK
 # ==========================
 MOCK_IRRIGATION_DATA = {
     "agent_response": {
@@ -19,7 +19,7 @@ MOCK_IRRIGATION_DATA = {
             "suggested_cycles": [{"start_time_local": "2025-12-14T09:00:00", "duration_minutes": 20, "comment": "Ciclo Simulado 1"}],
             "warnings": ["[MOCK] Alerta simulada."],
         },
-        "explanation": "Respuesta simulada (LOREM IPSUM). Interfaz renderizada sin llamar a Gemini."
+        "explanation": "Respuesta simulada (LOREM IPSUM)."
     },
     "data_context": {"recent_timeseries": {"metrics": {}}, "daily_features": []}
 }
@@ -29,16 +29,16 @@ MOCK_STRESS_DATA = {
         "stress_alert": {
             "risk_level": "ALTO (MOCK)",
             "primary_risk": "Abiótico (Simulación)",
-            "detailed_reason": "Riesgo simulado de Lorem Ipsum por condiciones de Dolor Sit Amet."
+            "detailed_reason": "Riesgo simulado de Lorem Ipsum."
         },
-        "recommendations": {"climate_control": "Ventilación simulada 100%.", "sanitary_alert": "Vigilar vectores test."}
+        "recommendations": {"climate_control": "Ventilación 100%.", "sanitary_alert": "Vigilar vectores."}
     }
 }
 
 MOCK_PRODUCT_DATA = {
     "product_plan": [{"product_name": "Producto Mock A", "dose": "2 L/ha", "application_timing": "Inmediato", "reason": "Tratar déficit Mock."}],
-    "agronomic_advice": "Estrategia simulada. Sin inferencia real.",
-    "audit_log": {"mock": True, "info": "Log de auditoría simulado"}
+    "agronomic_advice": "Estrategia simulada.",
+    "audit_log": {"mock": True, "info": "Log simulado"}
 }
 
 # ==========================
@@ -53,11 +53,11 @@ PROJECT_ID = "tfg-agro-llm"
 DATASET_ID = "agro_data"
 
 if not IRRIGATION_URL:
-    st.error("❌ Falta configuración de URLs.")
+    st.error("❌ Falta URL.")
     st.stop()
 
 # ==========================
-# FUNCIONES BACKEND (BQ)
+# FUNCIONES BACKEND
 # ==========================
 def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
     client = bigquery.Client(project=PROJECT_ID)
@@ -72,7 +72,7 @@ def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
     }
     errors = client.insert_rows_json(table_id, [row])
     if errors: st.error(f"Error BQ: {errors}")
-    else: st.success("✅ Guardado en historial.")
+    else: st.success("✅ Guardado.")
 
 def load_history_from_bq(limit=10):
     client = bigquery.Client(project=PROJECT_ID)
@@ -95,27 +95,17 @@ def parse_timeseries_to_df(ts_data):
     return pd.concat(dfs, axis=1).sort_index() if dfs else pd.DataFrame()
 
 def render_quality_indicator(data_context):
-    # CORRECCIÓN: Usamos if/else explícitos para evitar que Streamlit imprima el objeto DeltaGenerator
     ts = data_context.get("recent_timeseries", {}).get("metrics", {})
     daily = data_context.get("daily_features", [])
-    
     c1, c2, c3 = st.columns(3)
     
-    with c1:
-        has_data = any(len(v) > 0 for v in ts.values())
-        if has_data:
-            st.success("📡 Sensores Online")
-        else:
-            st.warning("📡 Sin datos")
-            
-    with c2:
-        if len(daily) >= 5:
-            st.success(f"📅 Histórico: {len(daily)} días")
-        else:
-            st.warning(f"📅 Histórico: {len(daily)} días")
-            
-    with c3:
-        st.info("⏱️ Latencia: < 5min")
+    with c1: 
+        if any(len(v)>0 for v in ts.values()): st.success("📡 Sensores Online")
+        else: st.warning("📡 Sin datos")
+    with c2: 
+        if len(daily)>=5: st.success(f"📅 Histórico: {len(daily)} días")
+        else: st.warning(f"📅 Histórico: {len(daily)} días")
+    with c3: st.info("⏱️ Latencia: < 5min")
 
 # ==========================
 # UI PRINCIPAL
@@ -136,7 +126,6 @@ with st.sidebar:
     use_str = st.toggle("Agente Estrés", True)
     use_prod = st.toggle("Agente Productos", True)
 
-# Estado persistente para feedback
 if "audit_cache" not in st.session_state: st.session_state.audit_cache = None
 
 tab_dash, tab_riego, tab_estres, tab_prod, tab_hist = st.tabs(["📊 Monitor", "💧 Riego", "🌡️ Estrés", "🧪 Plan & Feedback", "📜 Historial"])
@@ -171,7 +160,7 @@ if submitted:
         else:
             time.sleep(0.5); str_resp = MOCK_STRESS_DATA["agent_response"]; s.write("⚠️ Estrés Mock")
 
-        # 3. Productos (Síntesis)
+        # 3. Productos
         s.write("🧪 Productos...")
         if use_prod:
             pl = {**base, "irrigation_recommendation": irr_resp, "stress_alert": str_resp}
@@ -186,7 +175,7 @@ if submitted:
         s.update(label="¡Completado!", state="complete", expanded=False)
         st.session_state.audit_cache = prod_resp.get("audit_log", {})
 
-    # --- PESTAÑA 1: DASHBOARD ---
+    # --- TAB 1 ---
     with tab_dash:
         render_quality_indicator(raw_riego)
         df = parse_timeseries_to_df(raw_riego.get("recent_timeseries", {}))
@@ -197,20 +186,24 @@ if submitted:
             if "RF" in df.columns: c2.line_chart(df[["RF"]], height=200, color="#FFA500")
         else: st.info("Sin datos sensores.")
 
-    # --- PESTAÑA 2: RIEGO ---
+    # --- TAB 2 (CORREGIDO) ---
     with tab_riego:
         rec = irr_resp.get("recommendation", {})
         if rec:
             c1, c2 = st.columns([1, 2])
             with c1:
-                st.success(f"🚿 RIEGO: {rec.get('reason')}") if rec.get("apply_irrigation") else st.info("⏸️ NO REGAR")
+                # AQUÍ ESTABA EL ERROR: USAR IF/ELSE EXPLÍCITO
+                if rec.get("apply_irrigation"):
+                    st.success(f"🚿 RIEGO: {rec.get('reason')}")
+                else:
+                    st.info("⏸️ NO REGAR")
                 st.metric("Volumen", f"{rec.get('suggested_water_l_m2', 0)} L/m²")
             with c2: st.info(irr_resp.get("explanation", "-"))
             if rec.get("suggested_cycles"): st.table(rec["suggested_cycles"])
             for w in rec.get("warnings", []): st.warning(w)
         else: st.error("Sin datos Riego.")
 
-    # --- PESTAÑA 3: ESTRÉS ---
+    # --- TAB 3 ---
     with tab_estres:
         alert = str_resp.get("stress_alert", {})
         if alert:
@@ -223,7 +216,7 @@ if submitted:
             c2.markdown("**🦠 Sanidad**"); c2.write(str_resp.get("recommendations", {}).get("sanitary_alert"))
         else: st.info("Sin alertas.")
 
-    # --- PESTAÑA 4: PRODUCTOS & FEEDBACK ---
+    # --- TAB 4 ---
     with tab_prod:
         plan = prod_resp.get("product_plan", [])
         st.markdown("### 🧪 Estrategia")
@@ -250,7 +243,7 @@ if submitted:
                 if st.form_submit_button("💾 Guardar"):
                     save_feedback_to_bq(st.session_state.audit_cache, rat, txt, acc)
 
-# --- PESTAÑA 5: HISTORIAL ---
+# --- TAB 5 ---
 with tab_hist:
     if st.button("🔄 Actualizar"):
         df = load_history_from_bq()
