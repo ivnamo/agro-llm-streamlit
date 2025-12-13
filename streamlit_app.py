@@ -47,47 +47,54 @@ DATASET_ID = "agro_data"
 if not IRRIGATION_URL: st.error("❌ Falta URL."); st.stop()
 
 # ==========================
-# FUNCIONES BQ (AUTENTICACIÓN SEGURA)
+# FUNCIONES BQ (AUTENTICACIÓN BLINDADA)
 # ==========================
 def get_bq_client():
     """
-    Intenta conectar a BQ usando st.secrets (Producción en Streamlit Cloud)
-    o credenciales por defecto (Local/Cloud Run).
+    Crea cliente BQ. Si falla la autenticación por secretos, AVISA y para,
+    en lugar de intentar conectar al metadata server y dar timeout.
     """
-    try:
-        # Intenta leer el bloque [gcp_service_account] de los secretos
-        if "gcp_service_account" in st.secrets:
+    # 1. Intentar cargar desde Secrets (Producción Streamlit Cloud)
+    if "gcp_service_account" in st.secrets:
+        try:
             creds = service_account.Credentials.from_service_account_info(
                 st.secrets["gcp_service_account"]
             )
             return bigquery.Client(credentials=creds, project=PROJECT_ID)
+        except Exception as e:
+            st.error(f"❌ Error cargando credenciales de secretos: {e}")
+            st.stop()
+            return None
+
+    # 2. Intentar entorno local (gcloud auth application-default login)
+    try:
+        return bigquery.Client(project=PROJECT_ID)
     except Exception:
-        pass
-    
-    # Fallback: Si no hay secretos, intenta autenticación por entorno (útil si lo corres en local con gcloud auth)
-    return bigquery.Client(project=PROJECT_ID)
+        st.error("❌ No se encontraron credenciales (Secrets o Local). Revisa la configuración.")
+        st.stop()
+        return None
 
 def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
     try:
-        client = get_bq_client() # <--- Usamos el cliente autenticado
+        client = get_bq_client()
         table_id = f"{PROJECT_ID}.{DATASET_ID}.recommendation_history"
         row = {
-            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "location_id": 8507,
             "rating": rating,
             "user_feedback": feedback_text,
             "accepted": accepted,
-            "full_audit_log": audit_log 
+            "full_audit_log": audit_log # Pasamos dict, el cliente lo serializa
         }
         errors = client.insert_rows_json(table_id, [row])
         if errors: st.error(f"Error BQ: {errors}")
         else: st.toast("✅ Feedback guardado correctamente", icon="💾")
     except Exception as e:
-        st.error(f"Error de conexión BQ: {e}")
+        st.error(f"Error conexión BQ (Guardar): {e}")
 
 def load_history_from_bq(selected_date=None):
     try:
-        client = get_bq_client() # <--- Usamos el cliente autenticado
+        client = get_bq_client()
         where_clause = ""
         if selected_date:
             where_clause = f"WHERE DATE(timestamp) = '{selected_date.strftime('%Y-%m-%d')}'"
@@ -101,7 +108,7 @@ def load_history_from_bq(selected_date=None):
         """
         return client.query(q).to_dataframe()
     except Exception as e:
-        st.error(f"Error leyendo historial: {e}")
+        st.error(f"Error conexión BQ (Leer): {e}")
         return pd.DataFrame()
 
 # ==========================
@@ -269,9 +276,21 @@ with tab_hist:
                 status = "✅ Aceptado" if r['accepted'] else "❌ Rechazado"
                 with st.expander(f"{r['timestamp']} | {stars} | {status}"):
                     st.write(f"**Feedback:** {r['user_feedback']}")
+                    
+                    # --- CORRECCIÓN AQUÍ: MANEJO SEGURO DE JSON/DICT ---
                     log_data = r['full_audit_log']
-                    if isinstance(log_data, str): log_data = json.loads(log_data)
-                    st.table(pd.DataFrame(log_data.get("ai_reasoning_output", {}).get("product_plan", [])))
-                    if st.checkbox("JSON Completo", key=f"h_{i}"): st.json(log_data)
+                    if isinstance(log_data, str):
+                        try:
+                            log_data = json.loads(log_data)
+                        except:
+                            log_data = {}
+                    
+                    # Renderizar tabla
+                    if isinstance(log_data, dict):
+                        prod_list = log_data.get("ai_reasoning_output", {}).get("product_plan", [])
+                        if prod_list: st.table(pd.DataFrame(prod_list))
+                        if st.checkbox("JSON Completo", key=f"h_{i}"): st.json(log_data)
+                    else:
+                        st.warning("Formato de log inválido.")
         else:
             st.warning("No hay registros.")
