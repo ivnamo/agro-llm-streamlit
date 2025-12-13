@@ -1,13 +1,32 @@
-from typing import Any, Dict
-
-from common.bq_timeseries import (
-    query_daily_features_last_days,
-    query_recent_timeseries,
-)
+import datetime as dt
+from typing import Any, Dict, List
+from google.cloud import bigquery
+from common.bq_timeseries import (query_daily_features_last_days, query_recent_timeseries)
 from common.context_base import build_static_context
 from common.rag_client import rag_retrieve, build_rag_context_text
+from cloud_run.irrigation_agent.config import PROJECT_ID, BQ_DATASET, LOCATION_ID, LOCATION_NAME, RAG_K
 
-from cloud_run.irrigation_agent.config import LOCATION_ID, LOCATION_NAME, RAG_K
+# --- NUEVA FUNCIÓN: Consulta el futuro para el Agente de Riego ---
+def query_irrigation_forecast_24h() -> List[Dict[str, Any]]:
+    """
+    Recupera solo las métricas críticas para DECISIONES HIDRÁULICAS (Et0, Lluvia, Temp).
+    """
+    client = bigquery.Client(project=PROJECT_ID)
+    query = f"""
+    SELECT
+        ts_forecast,
+        temp_2m,
+        et0,          -- Clave para demanda hídrica futura
+        precip_mm,    -- Clave para suspender riego
+        prob_precip
+    FROM `{PROJECT_ID}.{BQ_DATASET}.openmeteo_hourly_forecast`
+    WHERE ts_forecast >= CURRENT_TIMESTAMP()
+      AND ts_forecast <= TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
+    ORDER BY ts_forecast ASC
+    """
+    rows = client.query(query).result()
+    # Serializamos
+    return [dict(row, ts_forecast=row["ts_forecast"].isoformat()) for row in rows]
 
 
 def build_rag_query_from_payload(payload: Dict[str, Any]) -> str:
@@ -49,26 +68,27 @@ def build_rag_query_from_payload(payload: Dict[str, Any]) -> str:
 
 
 def build_irrigation_payload(body: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Orquesta BigQuery + contexto estático + overrides + notas agricultor
-    y devuelve el payload de entrada al LLM.
-    """
     context_overrides = body.get("context_overrides") or {}
     farmer_notes = body.get("farmer_notes") or ""
 
+    # 1. Datos del Pasado (BigQuery)
     daily_features = query_daily_features_last_days(days=7)
     recent_ts = query_recent_timeseries(hours_back=24)
+    
+    # 2. Datos del Futuro (NUEVO - "Dopaje")
+    forecast_data = query_irrigation_forecast_24h()
+    
     static_ctx = build_static_context(context_overrides)
 
-    payload: Dict[str, Any] = {
+    payload = {
         "location_id": LOCATION_ID,
         "location_name": LOCATION_NAME,
         **static_ctx,
         "farmer_notes": farmer_notes,
         "daily_features_last_days": daily_features,
         "recent_timeseries_last_hours": recent_ts,
+        "meteo_forecast_24h": forecast_data  # <--- Inyección de futuro
     }
-
     return payload
 
 
