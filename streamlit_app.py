@@ -7,38 +7,34 @@ import os
 # ==========================
 # CONFIGURACIÓN
 # ==========================
-st.set_page_config(page_title="Agro-IA: Riego y Manejo", page_icon="🌿", layout="wide")
+st.set_page_config(page_title="Agro-IA: S4 Invernadero", page_icon="🌿", layout="wide")
 
-# Intenta leer de variables de entorno (Cloud Run), si no, busca en st.secrets (Local)
+# URLs de los servicios (Variables de entorno o secrets)
 IRRIGATION_URL = os.getenv("IRRIGATION_URL") or st.secrets.get("irrigation_url")
 PRODUCT_URL = os.getenv("PRODUCT_URL") or st.secrets.get("product_url")
+STRESS_URL = os.getenv("STRESS_URL") or st.secrets.get("stress_url")
 
-if not IRRIGATION_URL or "URL_DE_TU" in IRRIGATION_URL:
-    st.error("❌ Falta configurar la URL del Agente de Riego (IRRIGATION_URL)")
+if not IRRIGATION_URL:
+    st.error("❌ Falta configurar las URLs de los servicios (IRRIGATION_URL, etc.)")
     st.stop()
 
 # ==========================
 # FUNCIONES AUXILIARES
 # ==========================
-
 def parse_timeseries_to_df(ts_data):
     if not ts_data or "metrics" not in ts_data:
         return pd.DataFrame()
-    
     metrics = ts_data["metrics"]
     dfs = []
     for metric_name, values in metrics.items():
-        if not values:
-            continue
+        if not values: continue
         df_m = pd.DataFrame(values)
-        df_m["ts_utc"] = pd.to_datetime(df_m["ts_utc"])
-        df_m = df_m.rename(columns={"value": metric_name})
-        df_m = df_m.set_index("ts_utc")
-        dfs.append(df_m)
-    
-    if not dfs:
-        return pd.DataFrame()
-        
+        if "ts_utc" in df_m.columns:
+            df_m["ts_utc"] = pd.to_datetime(df_m["ts_utc"])
+            df_m = df_m.rename(columns={"value": metric_name})
+            df_m = df_m.set_index("ts_utc")
+            dfs.append(df_m)
+    if not dfs: return pd.DataFrame()
     return pd.concat(dfs, axis=1).sort_index()
 
 def render_quality_indicator(data_context):
@@ -46,22 +42,15 @@ def render_quality_indicator(data_context):
     daily = data_context.get("daily_features", [])
     
     col1, col2, col3 = st.columns(3)
-    
     has_data = any(len(v) > 0 for v in ts.values())
+    
     with col1:
-        if has_data:
-            st.success("📡 Sensores Online")
-        else:
-            st.error("📡 Sin conexión Sensores")
+        if has_data: st.success("📡 Sensores Online")
+        else: st.error("📡 Sin conexión Sensores")
             
-    days_count = len(daily)
     with col2:
-        if days_count >= 5:
-            st.success(f"📅 Histórico: {days_count} días")
-        elif days_count > 0:
-            st.warning(f"📅 Histórico parcial ({days_count} días)")
-        else:
-            st.error("📅 Sin histórico diario")
+        if len(daily) >= 5: st.success(f"📅 Histórico: {len(daily)} días")
+        else: st.warning(f"📅 Histórico parcial ({len(daily)} días)")
 
     with col3:
         st.info("⏱️ Latencia: < 5min")
@@ -69,166 +58,166 @@ def render_quality_indicator(data_context):
 # ==========================
 # INTERFAZ PRINCIPAL
 # ==========================
-
 st.title("🌿 Sistema Integral de Gestión Agrícola (S4)")
-st.markdown("Orquestación de Agentes: **Ingeniería Hidráulica** + **Manejo de Productos**")
+st.markdown("Orquestación Multi-Agente: **Hidráulica** + **Fisiología** + **Agronomía**")
 
 with st.sidebar:
-    st.header("📋 Configuración de Parcela")
+    st.header("📋 Configuración")
     with st.form("params_form"):
         st.subheader("Cultivo")
         crop_species = st.selectbox("Especie", ["tomate", "pimiento", "pepino"], index=0)
         crop_stage = st.selectbox("Fase", ["trasplante", "crecimiento", "floracion", "cuajado_y_engorde", "maduracion"], index=3)
         
-        st.subheader("Objetivos Suelo")
-        target_vwc = st.slider("Humedad Objetivo (%)", 20.0, 40.0, (25.0, 35.0))
-        max_salinity = st.number_input("Salinidad Máx (µS/cm)", value=2500.0, step=100.0)
-        
         st.subheader("Notas Agricultor")
-        farmer_notes = st.text_area("Observaciones", placeholder="Ej: Veo hojas amarillas en la zona sur...")
+        farmer_notes = st.text_area("Observaciones", placeholder="Ej: Veo hojas amarillas, posible oídio...")
         
-        submitted = st.form_submit_button("🔄 GENERAR ESTRATEGIA", type="primary")
+        submitted = st.form_submit_button("🔄 EJECUTAR ANÁLISIS", type="primary")
 
 if submitted:
-    tab_dashboard, tab_riego, tab_productos = st.tabs(["📊 Monitorización (Datos)", "💧 Recomendación Riego", "🧪 Plan Productos"])
+    # Definimos pestañas incluyendo la nueva de Estrés
+    tab_dashboard, tab_riego, tab_estres, tab_productos = st.tabs([
+        "📊 Monitorización", 
+        "💧 Riego (Hidráulica)", 
+        "🌡️ Estrés (Fisiología)", 
+        "🧪 Plan (Agronomía)"
+    ])
     
     user_context = {
-        "crop": {"species": crop_species, "phenological_stage": crop_stage},
-        "soil": {
-            "target_vwc_profile_range": target_vwc,
-            "max_acceptable_salinity_uScm": max_salinity
-        }
+        "crop": {"species": crop_species, "phenological_stage": crop_stage}
     }
     
-    payload_riego = {
+    payload_base = {
         "context_overrides": user_context,
         "farmer_notes": farmer_notes
     }
 
-    # --- LLAMADA RIEGO ---
-    irrigation_reco = {}
-    raw_data = {}
+    # --- ORQUESTACIÓN DE AGENTES ---
+    irrigation_resp = {}
+    stress_resp = {}
+    product_resp = {}
+    raw_data_riego = {}
     
-    with st.spinner("🤖 Agente de Riego analizando sensores..."):
+    # Usamos un contenedor de estado para informar del progreso
+    with st.status("🤖 Coordinando Agentes Inteligentes...", expanded=True) as status:
+        
+        # 1. PARALELO VIRTUAL: Riego y Estrés
+        # (En Python requests es bloqueante, pero son rápidos)
+        
+        # --- AGENTE DE RIEGO ---
+        status.write("💧 Agente Hidráulico: Calculando balance y pronóstico...")
         try:
-            r_irrigation = requests.post(IRRIGATION_URL, json=payload_riego, timeout=120)
-            r_irrigation.raise_for_status()
-            data_irrigation = r_irrigation.json()
-            
-            irrigation_reco = data_irrigation.get("agent_response", {}) or {} # <--- Aseguramos dict
-            raw_data = data_irrigation.get("data_context", {}) or {}
-            
+            r_irr = requests.post(IRRIGATION_URL, json=payload_base, timeout=60)
+            r_irr.raise_for_status()
+            data_irr = r_irr.json()
+            irrigation_resp = data_irr.get("agent_response", {})
+            raw_data_riego = data_irr.get("data_context", {})
+            status.write("✅ Riego completado.")
         except Exception as e:
-            st.error(f"Error conectando con Agente de Riego: {e}")
-            # No detenemos la ejecución para intentar mostrar al menos los datos parciales
-            irrigation_reco = {"explanation": f"Fallo de conexión: {e}"}
+            st.error(f"Fallo en Agente Riego: {e}")
 
-    # --- LLAMADA PRODUCTOS ---
-    payload_productos = {
-        "context_overrides": user_context,
-        "farmer_notes": farmer_notes,
-        "irrigation_recommendation": irrigation_reco 
-    }
-    
-    data_products = {}
-    with st.spinner("💊 Agente de Productos consultando Vademécum..."):
+        # --- AGENTE DE ESTRÉS ---
+        status.write("🌡️ Agente Fisiólogo: Analizando riesgos bióticos/abióticos...")
         try:
-            r_product = requests.post(PRODUCT_URL, json=payload_productos, timeout=120)
-            r_product.raise_for_status()
-            data_products = r_product.json()
+            r_str = requests.post(STRESS_URL, json=payload_base, timeout=60)
+            r_str.raise_for_status()
+            data_str = r_str.json()
+            stress_resp = data_str.get("agent_response", {})
+            status.write("✅ Análisis de estrés completado.")
         except Exception as e:
-            st.warning(f"Agente de Productos no disponible: {e}")
+            st.warning(f"Agente Estrés no disponible: {e}")
+
+        # 2. SÍNTESIS: Agente de Productos
+        # Le pasamos lo que dijeron los otros dos
+        status.write("🧪 Agente Agrónomo: Diseñando estrategia integral...")
+        
+        payload_prod = {
+            **payload_base,
+            "irrigation_recommendation": irrigation_resp, # Input del Hidráulico
+            "stress_alert": stress_resp                   # Input del Fisiólogo
+        }
+        
+        try:
+            r_prod = requests.post(PRODUCT_URL, json=payload_prod, timeout=90)
+            r_prod.raise_for_status()
+            product_resp = r_prod.json()
+            status.write("✅ Plan nutricional generado.")
+        except Exception as e:
+            st.warning(f"Agente Productos no disponible: {e}")
+            
+        status.update(label="¡Estrategia Completa Generada!", state="complete", expanded=False)
 
     # --- PESTAÑA 1: DASHBOARD ---
     with tab_dashboard:
         st.markdown("### 📡 Estado de los Sensores")
-        # Protección por si raw_data viene vacío
-        if raw_data:
-            render_quality_indicator(raw_data)
-            df_ts = parse_timeseries_to_df(raw_data.get("recent_timeseries", {}))
-        else:
-            st.warning("⚠️ No se pudieron recuperar datos de sensores.")
-            df_ts = pd.DataFrame()
-        
-        if not df_ts.empty:
-            cols_vwc = [c for c in df_ts.columns if "VWC" in c]
-            if cols_vwc:
-                st.markdown("#### 💧 Humedad de Suelo (%)")
-                st.line_chart(df_ts[cols_vwc], height=300)
+        if raw_data_riego:
+            render_quality_indicator(raw_data_riego)
+            df_ts = parse_timeseries_to_df(raw_data_riego.get("recent_timeseries", {}))
             
-            col_graph1, col_graph2 = st.columns(2)
-            with col_graph1:
-                st.markdown("#### 🌡️ Temperatura Interna")
-                if "T_in" in df_ts.columns:
-                    st.line_chart(df_ts[["T_in"]], height=200, color="#FF4B4B")
-            with col_graph2:
-                st.markdown("#### ☀️ Radiación")
-                if "RF" in df_ts.columns:
-                    st.line_chart(df_ts[["RF"]], height=200, color="#FFA500")
+            if not df_ts.empty:
+                cols_vwc = [c for c in df_ts.columns if "VWC" in c]
+                if cols_vwc:
+                    st.line_chart(df_ts[cols_vwc], height=250)
+                
+                c1, c2 = st.columns(2)
+                if "T_in" in df_ts.columns: c1.line_chart(df_ts[["T_in"]], height=200, color="#FF4B4B")
+                if "RF" in df_ts.columns: c2.line_chart(df_ts[["RF"]], height=200, color="#FFA500")
         else:
-            st.info("Sin datos recientes de sensores.")
+            st.info("Sin datos de sensores.")
 
-        st.divider()
-        st.markdown("### 📈 Tendencias Diarias")
-        daily_list = raw_data.get("daily_features", []) if raw_data else []
-        if daily_list:
-            df_daily = pd.DataFrame(daily_list)
-            if "fecha" in df_daily.columns:
-                df_daily = df_daily.set_index("fecha")
-            
-            # --- CORRECCIÓN ERROR STREAMLIT ---
-            # El error pedía usar width='stretch' en lugar de use_container_width
-            try:
-                st.dataframe(df_daily, width=None) # Dejamos que Streamlit decida el ancho por defecto
-            except:
-                st.dataframe(df_daily)
-        else:
-            st.info("No hay features diarias disponibles.")
-  # --- PESTAÑA 2: RIEGO ---
+    # --- PESTAÑA 2: RIEGO ---
     with tab_riego:
-        # --- PROTECCIÓN ROBUSTA CONTRA ERRORES 402/500 ---
-        # Si falla la IA, irrigation_reco puede ser None o contener solo un error
-        reco = irrigation_reco.get("recommendation") if irrigation_reco else None
-        expl = irrigation_reco.get("explanation", "Error de conexión con el cerebro de riego.") if irrigation_reco else "Error fatal."
-
-        if not reco:
-            st.error("⚠️ El sistema de IA no está disponible temporalmente.")
-            st.code(expl) # Mostramos el error técnico (ej. 402 Payment Required)
-        else:
-            # Aquí entra solo si hay recomendación válida
+        reco = irrigation_resp.get("recommendation")
+        expl = irrigation_resp.get("explanation", "Sin respuesta.")
+        
+        if reco:
             col_r1, col_r2 = st.columns([1, 2])
             with col_r1:
-                st.markdown("#### 🚿 Decisión")
                 do_irrigate = reco.get("apply_irrigation", False)
-                if do_irrigate:
-                    st.success("APLICAR RIEGO")
-                else:
-                    st.info("NO REGAR")
-                
+                if do_irrigate: st.success(f"🚿 APLICAR RIEGO: {reco.get('reason','-')}")
+                else: st.info("⏸️ NO REGAR")
                 st.metric("Volumen", f"{reco.get('suggested_water_l_m2', 0)} L/m²")
-                st.markdown(f"**Estrategia:** {reco.get('reason', '-')}")
-                
-            with col_r2:
-                st.markdown("#### 📝 Justificación")
-                st.info(expl)
             
-            st.markdown("#### 🕒 Ciclos")
-            cycles = reco.get("suggested_cycles", [])
-            if cycles:
-                st.table(pd.DataFrame(cycles))
-            else:
-                st.caption("Sin ciclos específicos.")
+            with col_r2:
+                st.info(f"**Razonamiento:** {expl}")
                 
-            if reco.get("warnings"):
-                for w in reco["warnings"]:
-                    st.warning(f"⚠️ {w}")
+            cycles = reco.get("suggested_cycles", [])
+            if cycles: st.table(pd.DataFrame(cycles))
+            
+            for w in reco.get("warnings", []): st.warning(f"⚠️ {w}")
+        else:
+            st.error("El agente de riego no devolvió una recomendación válida.")
 
-    # --- PESTAÑA 3: PRODUCTOS ---
-    with tab_productos:
-        prod_plan = data_products.get("product_plan", [])
-        advice = data_products.get("agronomic_advice", "")
+    # --- PESTAÑA 3: ESTRÉS (NUEVA) ---
+    with tab_estres:
+        alert = stress_resp.get("stress_alert", {})
+        recs = stress_resp.get("recommendations", {})
         
-        st.markdown("### 🧪 Estrategia de Nutrición")
+        if alert:
+            risk_level = alert.get("risk_level", "DESCONOCIDO")
+            color = "red" if "ALTO" in risk_level else "orange" if "MEDIO" in risk_level else "green"
+            
+            st.markdown(f"### Riesgo Detectado: :{color}[{risk_level}]")
+            st.markdown(f"**Factor Principal:** {alert.get('primary_risk', '-')}")
+            st.info(alert.get("detailed_reason", ""))
+            
+            st.divider()
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("#### 🌬️ Manejo de Clima")
+                st.write(recs.get("climate_control", "-"))
+            with c2:
+                st.markdown("#### 🦠 Alerta Sanitaria")
+                st.write(recs.get("sanitary_alert", "-"))
+        else:
+            st.info("Sin alertas de estrés generadas.")
+
+    # --- PESTAÑA 4: PRODUCTOS ---
+    with tab_productos:
+        prod_plan = product_resp.get("product_plan", [])
+        advice = product_resp.get("agronomic_advice", "")
+        
+        st.markdown("### 🧪 Estrategia Agronómica")
         st.write(advice)
         
         if prod_plan:
@@ -238,7 +227,7 @@ if submitted:
                     st.write(f"**Momento:** {prod.get('application_timing')}")
                     st.caption(f"**Objetivo:** {prod.get('reason')}")
         else:
-            st.info("No hay productos recomendados.")
+            st.info("No se recomiendan productos adicionales.")
 
 else:
-    st.info("👈 Pulsa 'Generar Estrategia' para comenzar.")
+    st.info("👈 Pulsa 'Ejecutar Análisis' para comenzar.")
