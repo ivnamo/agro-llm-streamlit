@@ -94,19 +94,27 @@ def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
     add_log(f"Tabla destino: {table_id}", "info")
 
     try:
-        # Sanitizar JSON
-        audit_clean = json.loads(json.dumps(audit_log, default=str))
+        # 1. Limpieza: Aseguramos que sea un diccionario serializable (quitando fechas raras)
+        audit_clean_dict = json.loads(json.dumps(audit_log, default=str))
         
+        # 2. TRUCO FINAL: Convertir a STRING para que BigQuery no lo confunda con un RECORD
+        # Si tu columna en BQ es JSON, a veces prefiere recibir el string serializado.
+        audit_as_string = json.dumps(audit_clean_dict)
+
         row = {
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "location_id": 8507,
             "rating": rating,
             "user_feedback": feedback_text,
             "accepted": accepted,
-            "full_audit_log": audit_clean
+            "full_audit_log": audit_as_string # <--- AQUÍ ESTÁ EL CAMBIO (Enviamos String)
         }
         
         add_log("Enviando fila a BigQuery...", "info")
+        
+        # Debug: ver qué enviamos
+        # st.write(row) 
+        
         errors = client.insert_rows_json(table_id, [row])
         
         if errors == []:
@@ -114,11 +122,12 @@ def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
             st.toast("Guardado OK", icon="🎉")
         else:
             add_log(f"❌ BigQuery rechazó los datos: {errors}", "error")
+            # Si falla de nuevo, prueba a cambiar 'full_audit_log' por audit_clean_dict (el dict)
+            # pero el error anterior sugería que quería string o había conflicto de tipos.
 
     except Exception as e:
         add_log(f"💥 EXCEPCIÓN PYTHON: {str(e)}", "error")
         add_log(traceback.format_exc(), "error")
-
 def load_history_from_bq(selected_date=None):
     client = get_bq_client()
     if not client: return pd.DataFrame()
