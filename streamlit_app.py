@@ -45,7 +45,8 @@ DATASET_ID = "agro_data"
 # ⚠️ LA CLAVE DEL ÉXITO: FORZAR LA REGIÓN DE MADRID
 BQ_LOCATION = "europe-southwest1" 
 
-if not IRRIGATION_URL: st.error("❌ Falta URL."); st.stop()
+# Validacion simple de URL (puedes comentarla si solo usas mocks ahora mismo)
+# if not IRRIGATION_URL: st.error("❌ Falta URL."); st.stop()
 
 # ==========================
 # LOGS
@@ -66,7 +67,6 @@ def get_bq_client():
             creds = service_account.Credentials.from_service_account_info(
                 st.secrets["gcp_service_account"]
             )
-            # AQUÍ ESTÁ EL FIX: location=BQ_LOCATION
             return bigquery.Client(credentials=creds, project=PROJECT_ID, location=BQ_LOCATION)
         except Exception as e:
             add_log(f"Error credenciales: {e}", "error")
@@ -106,17 +106,21 @@ def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
             st.toast("Guardado OK", icon="🎉")
         else:
             add_log(f"❌ Error BigQuery: {errors}", "error")
+            st.error(f"Error guardando: {errors}")
 
     except Exception as e:
         add_log(f"💥 Error Python: {e}", "error")
+        st.error(f"Excepción Python al guardar: {e}")
 
 def load_history_from_bq(selected_date=None):
     client = get_bq_client()
-    if not client: return pd.DataFrame()
+    if not client: 
+        st.error("No se pudo iniciar el cliente BigQuery.")
+        return None
     
     where = f"WHERE DATE(timestamp) = '{selected_date.strftime('%Y-%m-%d')}'" if selected_date else ""
     
-    # IMPORTANTE: El cliente ahora sabe que debe buscar en 'europe-southwest1'
+    # Query explicita
     q = f"""
         SELECT timestamp, rating, user_feedback, full_audit_log, accepted 
         FROM `{PROJECT_ID}.{DATASET_ID}.recommendation_history` 
@@ -125,10 +129,20 @@ def load_history_from_bq(selected_date=None):
     """
     
     try:
-        return client.query(q).to_dataframe()
+        # Intentamos leer. Si falta db-dtypes, aquí explotará
+        df = client.query(q).to_dataframe()
+        return df
+        
     except Exception as e:
+        # ESTO ES LO NUEVO: Te muestra el error en la cara
+        error_msg = str(e)
+        st.error(f"🚨 ERROR CRÍTICO LEYENDO BQ: {error_msg}")
+        
+        if "db-dtypes" in error_msg:
+            st.warning("💡 SOLUCIÓN: Añade 'db-dtypes' a tu requirements.txt en GitHub y espera al redeploy.")
+            
         add_log(f"Error leyendo historial: {e}", "error")
-        return pd.DataFrame()
+        return None # Retornamos None para saber que falló
 
 # ==========================
 # UI
@@ -177,14 +191,21 @@ with tab_plan:
                 save_feedback_to_bq(res["audit"], rating, txt, accepted)
 
 with tab_hist:
+    st.write("Pulsa para ver las últimas 20 entradas:")
     if st.button("🔄 Refrescar Historial"):
-        df = load_history_from_bq()
+        df = load_history_from_bq() # Leemos sin filtro de fecha para traer TODO
+        
+        if df is None:
+            st.stop() # Se detiene aquí si hubo error técnico (ya mostrado arriba en rojo)
+            
         if not df.empty:
+            st.success(f"Se encontraron {len(df)} registros.")
             for i, r in df.iterrows():
-                stars = "⭐" * int(r['rating'])
+                stars = "⭐" * int(r['rating']) if pd.notnull(r['rating']) else "-"
                 status = "✅" if r['accepted'] else "❌"
+                ts_str = str(r['timestamp'])
                 
-                with st.expander(f"{r['timestamp']} | {stars} | {status}"):
+                with st.expander(f"{ts_str} | {stars} | {status}"):
                     st.write(f"**Feedback:** {r['user_feedback']}")
                     
                     # Parseo seguro del JSON
@@ -195,4 +216,4 @@ with tab_hist:
                     
                     st.json(log_data)
         else:
-            st.warning("No hay datos (revisa si la fecha coincide o si el log muestra error).")
+            st.warning("📭 La consulta funcionó correctamente, pero la tabla está vacía.")
