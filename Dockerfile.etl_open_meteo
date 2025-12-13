@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias
+# (requests y google-cloud-storage son las claves aquí)
+RUN pip install --no-cache-dir requests google-cloud-storage functions-framework
+
+# Copiar código del servicio
+COPY . .
+
+# Comando de arranque
+# --target debe coincidir con la función en main.py
+CMD ["functions-framework", "--target=fetch_openmeteo", "--port=8080", "--source=main.py"]
