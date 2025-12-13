@@ -10,7 +10,7 @@ LATITUDE = float(os.getenv("LATITUDE", "37.60"))
 LONGITUDE = float(os.getenv("LONGITUDE", "-1.31"))
 
 # Bucket de Google Cloud Storage
-GCS_BUCKET = os.getenv("GCS_BUCKET", "tfg-agro-llm")
+GCS_BUCKET = os.getenv("GCS_BUCKET", "tfg-agro-data")
 
 # Ruta donde se guardarán los jsons crudos
 # Estructura: raw/openmeteo/forecast/YYYY-MM-DD/forecast_HHMM.json
