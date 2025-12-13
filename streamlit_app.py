@@ -95,12 +95,27 @@ def parse_timeseries_to_df(ts_data):
     return pd.concat(dfs, axis=1).sort_index() if dfs else pd.DataFrame()
 
 def render_quality_indicator(data_context):
+    # CORRECCIÓN: Usamos if/else explícitos para evitar que Streamlit imprima el objeto DeltaGenerator
     ts = data_context.get("recent_timeseries", {}).get("metrics", {})
     daily = data_context.get("daily_features", [])
+    
     c1, c2, c3 = st.columns(3)
-    with c1: st.success("📡 Sensores Online") if any(len(v)>0 for v in ts.values()) else st.warning("📡 Sin datos")
-    with c2: st.success(f"📅 Histórico: {len(daily)} días") if len(daily)>=5 else st.warning(f"📅 Histórico: {len(daily)} días")
-    with c3: st.info("⏱️ Latencia: < 5min")
+    
+    with c1:
+        has_data = any(len(v) > 0 for v in ts.values())
+        if has_data:
+            st.success("📡 Sensores Online")
+        else:
+            st.warning("📡 Sin datos")
+            
+    with c2:
+        if len(daily) >= 5:
+            st.success(f"📅 Histórico: {len(daily)} días")
+        else:
+            st.warning(f"📅 Histórico: {len(daily)} días")
+            
+    with c3:
+        st.info("⏱️ Latencia: < 5min")
 
 # ==========================
 # UI PRINCIPAL
