@@ -287,10 +287,11 @@ if submitted:
         else:
             st.info("Sin alertas de estrés generadas.")
 
-    # --- PESTAÑA 4: PRODUCTOS ---
+# --- PESTAÑA 4: PRODUCTOS ---
     with tab_productos:
         prod_plan = product_resp.get("product_plan", [])
         advice = product_resp.get("agronomic_advice", "")
+        audit_data = product_resp.get("audit_log", None) # Recuperamos el log
         
         st.markdown("### 🧪 Estrategia Agronómica")
         st.write(advice)
@@ -303,6 +304,28 @@ if submitted:
                     st.caption(f"**Objetivo:** {prod.get('reason')}")
         else:
             st.info("No se recomiendan productos adicionales.")
-
+            
+        # --- ZONA DE AUDITORÍA (Descarga + Visualización + Copia) ---
+        if audit_data:
+            st.divider()
+            st.caption("📂 Zona de Auditoría y Trazabilidad")
+            
+            # Convertimos el dict a JSON string bonito
+            json_str = json.dumps(audit_data, indent=2, ensure_ascii=False)
+            file_name = f"informe_tecnico_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json"
+            
+            # 1. Botón de Descarga
+            st.download_button(
+                label="📥 Descargar Informe (JSON)",
+                data=json_str,
+                file_name=file_name,
+                mime="application/json",
+                help="Descarga el fichero completo para validación agronómica."
+            )
+            
+            # 2. Desplegable con visualización y botón de COPIAR
+            with st.expander("👁️ Ver y Copiar Informe Técnico Completo"):
+                # st.code muestra el texto y añade automáticamente el icono de copiar 📋
+                st.code(json_str, language="json")
 else:
     st.info("👈 Pulsa 'Ejecutar Análisis' para comenzar.")
