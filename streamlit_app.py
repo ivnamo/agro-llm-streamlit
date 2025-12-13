@@ -75,22 +75,57 @@ def get_bq_client():
         return None
 
 def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
+    st.info("🛠️ Iniciando intento de guardado (Debug Mode)...")
+    
     try:
+        # 1. Verificar cliente
         client = get_bq_client()
+        if not client:
+            st.error("❌ Debug: No se pudo crear el cliente de BigQuery.")
+            return
+
+        # 2. Definir ID de tabla
         table_id = f"{PROJECT_ID}.{DATASET_ID}.recommendation_history"
+        st.write(f"📂 Apuntando a tabla: `{table_id}`")
+
+        # 3. Preparar la fila (Sanitizar JSON)
+        # Convertimos el dict a string JSON y luego otra vez a dict para asegurar
+        # que no hay objetos raros (como fechas datetime) que rompan la inserción.
+        try:
+            audit_log_clean = json.loads(json.dumps(audit_log, default=str))
+        except Exception as e:
+            st.error(f"❌ Error serializando el JSON del log: {e}")
+            return
+
         row = {
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "location_id": 8507,
             "rating": rating,
             "user_feedback": feedback_text,
             "accepted": accepted,
-            "full_audit_log": audit_log # Pasamos dict, el cliente lo serializa
+            "full_audit_log": audit_log_clean 
         }
+        
+        # Muestra en pantalla qué vamos a enviar (para que tú lo veas)
+        with st.expander("📦 Ver Payload exacto a enviar"):
+            st.json(row)
+
+        # 4. Intentar Insertar
         errors = client.insert_rows_json(table_id, [row])
-        if errors: st.error(f"Error BQ: {errors}")
-        else: st.toast("✅ Feedback guardado correctamente", icon="💾")
+        
+        if errors == []:
+            st.success("✅ ¡BigQuery dice que se guardó correctamente!")
+            st.toast("Guardado OK", icon="🎉")
+        else:
+            st.error(f"❌ BigQuery rechazó los datos. Errores:")
+            st.write(errors)
+            st.warning("Pista: Si el error dice 'no such field', revisa el nombre de las columnas en BigQuery.")
+
     except Exception as e:
-        st.error(f"Error conexión BQ (Guardar): {e}")
+        st.error(f"💥 Excepción crítica en Python: {e}")
+        # Imprime el traceback completo para ver dónde explota
+        import traceback
+        st.text(traceback.format_exc())
 
 def load_history_from_bq(selected_date=None):
     try:
