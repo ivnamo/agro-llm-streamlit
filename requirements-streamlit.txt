@@ -1,5 +1,0 @@
-streamlit
-requests
-pandas
-google-cloud-bigquery
-db-dtypes
