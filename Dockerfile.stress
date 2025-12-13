@@ -1,0 +1,30 @@
+# Usamos una imagen ligera de Python
+FROM python:3.11-slim
+
+# Evitar archivos .pyc y logs con buffer
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# 1. Instalar dependencias
+# Asumimos que el requirements.txt está en la raíz del proyecto cuando lanzas el build
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 2. Copiar todo el código del repositorio
+COPY . .
+
+# 3. Configurar PYTHONPATH
+# Esto es CRÍTICO para que los imports tipo "from cloud_run.stress_agent..." funcionen
+ENV PYTHONPATH="/app"
+
+# 4. Variables de entorno por defecto
+ENV PORT=8080
+# Este agente no usa RAG de documentos por ahora, pero dejamos la variable por consistencia
+ENV RAG_PREFIX="rag/manuales"
+
+# 5. Comando de arranque
+# --source apunta a la ruta relativa del archivo main.py dentro del contenedor
+# --target apunta al nombre de la función definida en main.py (run_stress_agent)
+CMD ["functions-framework", "--target=run_stress_agent", "--port=8080", "--source=cloud_run/stress_agent/main.py"]
