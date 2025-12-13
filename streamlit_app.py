@@ -10,7 +10,7 @@ from google.cloud import bigquery
 from google.oauth2 import service_account
 
 # ==========================
-# 0. DATOS MOCK (Tus datos originales)
+# 0. DATOS MOCK
 # ==========================
 MOCK_IRRIGATION_DATA = {
     "agent_response": {
@@ -31,7 +31,7 @@ MOCK_STRESS_DATA = {
 MOCK_PRODUCT_DATA = {
     "product_plan": [{"product_name": "Producto Mock", "dose": "2 L/ha", "application_timing": "Ahora", "reason": "Test"}],
     "agronomic_advice": "Estrategia simulada.",
-    "audit_log": {"mock": True, "info": "Log simulado", "product_plan": [{"product_name": "Producto Mock", "dose": "2 L/ha"}]}
+    "audit_log": {"mock": True, "info": "Log simulado", "product_plan": [{"product_name": "Producto Mock", "dose": "2 L/ha", "reason": "Test"}]}
 }
 
 # ==========================
@@ -44,18 +44,12 @@ PRODUCT_URL = os.getenv("PRODUCT_URL") or st.secrets.get("product_url")
 STRESS_URL = os.getenv("STRESS_URL") or st.secrets.get("stress_url")
 PROJECT_ID = "tfg-agro-llm"
 DATASET_ID = "agro_data"
-
-# ⚠️ LA CORRECCIÓN CLAVE: Región explícita
 BQ_LOCATION = "europe-southwest1"
 
 # ==========================
-# FUNCIONES BQ (CORREGIDAS Y BLINDADAS)
+# FUNCIONES BQ
 # ==========================
 def get_bq_client():
-    """
-    Crea cliente BQ forzando la región de Madrid.
-    """
-    # 1. Intentar Secrets
     if "gcp_service_account" in st.secrets:
         try:
             creds = service_account.Credentials.from_service_account_info(
@@ -66,7 +60,6 @@ def get_bq_client():
             st.error(f"❌ Error credenciales Secrets: {e}")
             return None
 
-    # 2. Intentar Local
     try:
         return bigquery.Client(project=PROJECT_ID, location=BQ_LOCATION)
     except Exception as e:
@@ -80,7 +73,6 @@ def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
     table_id = f"{PROJECT_ID}.{DATASET_ID}.recommendation_history"
     
     try:
-        # Serialización segura para que no falle si hay fechas o tipos raros
         audit_clean = json.loads(json.dumps(audit_log, default=str))
         audit_str = json.dumps(audit_clean)
 
@@ -90,12 +82,12 @@ def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
             "rating": rating,
             "user_feedback": feedback_text,
             "accepted": accepted,
-            "full_audit_log": audit_str # Guardamos como String JSON
+            "full_audit_log": audit_str
         }
         
         errors = client.insert_rows_json(table_id, [row])
         if errors == []:
-            st.toast("✅ Feedback guardado correctamente", icon="💾")
+            st.toast("✅ Feedback guardado", icon="💾")
         else:
             st.error(f"Error BQ: {errors}")
             
@@ -122,7 +114,6 @@ def load_history_from_bq(selected_date=None):
         return client.query(q).to_dataframe()
     except Exception as e:
         st.error(f"Error leyendo historial: {e}")
-        # Si falla por db-dtypes, el usuario ya sabe qué hacer, pero no rompemos la app
         return pd.DataFrame()
 
 # ==========================
@@ -174,11 +165,9 @@ with st.sidebar:
     use_prod = st.toggle("Agente Productos", True)
 
 if submitted:
-    # Preparamos contexto
     ctx = {"crop": {"species": crop, "phenological_stage": stage}}
     base = {"context_overrides": ctx, "farmer_notes": notes}
     
-    # Inicializamos vars
     irr_resp, str_resp, prod_resp = {}, {}, {}
     raw_riego = {}
 
@@ -222,7 +211,6 @@ if submitted:
         
         s.update(label="¡Completado!", state="complete", expanded=False)
         
-        # Guardamos en Session State
         st.session_state.results = {
             "irrigation": irr_resp, 
             "raw_riego": raw_riego,
@@ -231,7 +219,6 @@ if submitted:
             "audit": prod_resp.get("audit_log", {})
         }
 
-# TABS
 tab_dash, tab_riego, tab_estres, tab_prod, tab_hist = st.tabs(["📊 Monitor", "💧 Riego", "🌡️ Estrés", "🧪 Plan & Feedback", "📜 Historial"])
 
 if st.session_state.results:
@@ -255,9 +242,7 @@ if st.session_state.results:
                 else: st.info("⏸️ NO REGAR")
                 st.metric("Volumen", f"{rec.get('suggested_water_l_m2', 0)} L/m²")
             with c2: st.info(res["irrigation"].get("explanation", "-"))
-            
-            if rec.get("suggested_cycles"): 
-                st.table(rec["suggested_cycles"])
+            if rec.get("suggested_cycles"): st.table(rec["suggested_cycles"])
         else: st.error("Sin datos de riego.")
 
     with tab_estres:
@@ -296,10 +281,10 @@ if st.session_state.results:
                 save_feedback_to_bq(res["audit"], rat, txt, acc)
 
 else:
-    with tab_dash: st.info("👈 Pulsa 'Ejecutar Análisis' en la barra lateral para comenzar.")
+    with tab_dash: st.info("👈 Pulsa 'Ejecutar Análisis' para comenzar.")
 
 # ==========================
-# PESTAÑA HISTORIAL MEJORADA
+# PESTAÑA HISTORIAL (CORREGIDA)
 # ==========================
 with tab_hist:
     c_date, c_btn = st.columns([1, 3])
@@ -311,33 +296,40 @@ with tab_hist:
         if not df.empty:
             st.caption(f"Mostrando los últimos {len(df)} registros.")
             for i, r in df.iterrows():
-                # Formato visual del encabezado
                 stars = "⭐" * int(r['rating']) if pd.notnull(r['rating']) else "-"
                 status = "✅ Aceptado" if r['accepted'] else "❌ Rechazado"
-                ts_str = str(r['timestamp'])[:16] # Cortar segundos para que sea mas limpio
+                ts_str = str(r['timestamp'])[:16]
                 
                 with st.expander(f"{ts_str} | {stars} | {status}"):
                     st.write(f"**Comentario:** {r['user_feedback']}")
                     
-                    # --- LÓGICA DE VISUALIZACIÓN LIMPIA ---
                     log_data = r['full_audit_log']
-                    
-                    # 1. Asegurar que es Diccionario
                     if isinstance(log_data, str):
                         try: log_data = json.loads(log_data)
                         except: log_data = {}
                     
-                    # 2. Intentar buscar el plan de productos para mostrar tabla
-                    # A veces está en la raiz, a veces dentro de 'agent_response'
+                    # Buscar plan de productos
                     plan_found = log_data.get("product_plan") 
                     if not plan_found and "agent_response" in log_data:
                          plan_found = log_data["agent_response"].get("product_plan")
 
+                    # --- CORRECCIÓN AQUÍ: Evitamos KeyError ---
                     if plan_found and isinstance(plan_found, list):
                         st.subheader("Plan Generado:")
-                        st.dataframe(pd.DataFrame(plan_found)[["product_name", "dose", "reason"]])
+                        df_plan = pd.DataFrame(plan_found)
+                        
+                        # Lista de columnas ideales
+                        cols_wanted = ["product_name", "dose", "reason"]
+                        
+                        # Solo pedimos las que existen en los datos (Intersección)
+                        final_cols = [c for c in cols_wanted if c in df_plan.columns]
+                        
+                        if final_cols:
+                            st.dataframe(df_plan[final_cols])
+                        else:
+                            # Si no coinciden las columnas, mostramos todo lo que haya
+                            st.dataframe(df_plan)
                     
-                    # 3. JSON completo oculto (Toggle)
                     if st.toggle("👁️ Ver JSON Técnico Completo", key=f"json_t_{i}"):
                         st.json(log_data)
         else:
