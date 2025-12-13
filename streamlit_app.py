@@ -5,39 +5,38 @@ import json
 import time
 import os
 import datetime
+import traceback
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
 # ==========================
-# 0. DATOS MOCK
+# 0. CONFIGURACIÓN Y MOCKS
 # ==========================
+st.set_page_config(page_title="Agro-IA: S4 Invernadero", page_icon="🌿", layout="wide")
+
+# DATOS MOCK
 MOCK_IRRIGATION_DATA = {
     "agent_response": {
         "recommendation": {
-            "apply_irrigation": True, "reason": "increase (MOCK)", "suggested_water_l_m2": 5.5,
-            "suggested_cycles": [{"start_time_local": "2025-12-14T09:00", "duration_minutes": 20}],
-            "warnings": ["[MOCK] Alerta simulada."],
-        }, "explanation": "Respuesta simulada (LOREM IPSUM)."
+            "apply_irrigation": True, "reason": "MOCK: Aumento hídrico", "suggested_water_l_m2": 5.5,
+            "suggested_cycles": [{"start_time_local": "09:00", "duration_minutes": 20}],
+        }, "explanation": "Respuesta simulada."
     }, "data_context": {"recent_timeseries": {"metrics": {}}, "daily_features": []}
 }
 MOCK_STRESS_DATA = {
     "agent_response": {
         "stress_alert": {
-            "risk_level": "ALTO (MOCK)", "primary_risk": "Abiótico", "detailed_reason": "Riesgo simulado."
-        }, "recommendations": {"climate_control": "Ventilación 100%.", "sanitary_alert": "Vigilar."}
+            "risk_level": "ALTO", "primary_risk": "Abiótico", "detailed_reason": "Simulación Mock."
+        }, "recommendations": {"climate_control": "Ventilación", "sanitary_alert": "Vigilar"}
     }
 }
 MOCK_PRODUCT_DATA = {
     "product_plan": [{"product_name": "Producto Mock", "dose": "2 L/ha", "application_timing": "Ahora", "reason": "Test"}],
-    "agronomic_advice": "Estrategia simulada.",
+    "agronomic_advice": "Consejo simulado.",
     "audit_log": {"mock": True, "info": "Log simulado"}
 }
 
-# ==========================
-# CONFIGURACIÓN
-# ==========================
-st.set_page_config(page_title="Agro-IA: S4 Invernadero", page_icon="🌿", layout="wide")
-
+# Variables de entorno
 IRRIGATION_URL = os.getenv("IRRIGATION_URL") or st.secrets.get("irrigation_url")
 PRODUCT_URL = os.getenv("PRODUCT_URL") or st.secrets.get("product_url")
 STRESS_URL = os.getenv("STRESS_URL") or st.secrets.get("stress_url")
@@ -47,285 +46,158 @@ DATASET_ID = "agro_data"
 if not IRRIGATION_URL: st.error("❌ Falta URL."); st.stop()
 
 # ==========================
-# FUNCIONES BQ (AUTENTICACIÓN BLINDADA)
+# GESTIÓN DE ERRORES PERSISTENTE
+# ==========================
+if "debug_logs" not in st.session_state:
+    st.session_state.debug_logs = []
+
+def add_log(msg, type="info"):
+    """Guarda logs en memoria para que no se borren al refrescar"""
+    ts = datetime.datetime.now().strftime("%H:%M:%S")
+    st.session_state.debug_logs.append({"ts": ts, "msg": msg, "type": type})
+
+# ==========================
+# FUNCIONES BQ (A PRUEBA DE BOMBAS)
 # ==========================
 def get_bq_client():
-    """
-    Crea cliente BQ. Si falla la autenticación por secretos, AVISA y para,
-    en lugar de intentar conectar al metadata server y dar timeout.
-    """
-    # 1. Intentar cargar desde Secrets (Producción Streamlit Cloud)
+    add_log("Intentando crear cliente BigQuery...", "info")
+    
+    # 1. Intentar Secrets
     if "gcp_service_account" in st.secrets:
         try:
             creds = service_account.Credentials.from_service_account_info(
                 st.secrets["gcp_service_account"]
             )
+            add_log("Credenciales leídas de st.secrets correctamente.", "success")
             return bigquery.Client(credentials=creds, project=PROJECT_ID)
         except Exception as e:
-            st.error(f"❌ Error cargando credenciales de secretos: {e}")
-            st.stop()
+            add_log(f"Error creando credenciales desde secrets: {str(e)}", "error")
             return None
 
-    # 2. Intentar entorno local (gcloud auth application-default login)
+    # 2. Intentar Local
     try:
+        add_log("Buscando credenciales por defecto (entorno)...", "warning")
         return bigquery.Client(project=PROJECT_ID)
-    except Exception:
-        st.error("❌ No se encontraron credenciales (Secrets o Local). Revisa la configuración.")
-        st.stop()
+    except Exception as e:
+        add_log(f"Fallo total autenticación: {str(e)}", "error")
         return None
 
 def save_feedback_to_bq(audit_log, rating, feedback_text, accepted):
-    st.info("🛠️ Iniciando intento de guardado (Debug Mode)...")
+    add_log("--- INICIO PROCESO DE GUARDADO ---", "info")
     
+    client = get_bq_client()
+    if not client:
+        add_log("No hay cliente BQ. Abortando.", "error")
+        return
+
+    table_id = f"{PROJECT_ID}.{DATASET_ID}.recommendation_history"
+    add_log(f"Tabla destino: {table_id}", "info")
+
     try:
-        # 1. Verificar cliente
-        client = get_bq_client()
-        if not client:
-            st.error("❌ Debug: No se pudo crear el cliente de BigQuery.")
-            return
-
-        # 2. Definir ID de tabla
-        table_id = f"{PROJECT_ID}.{DATASET_ID}.recommendation_history"
-        st.write(f"📂 Apuntando a tabla: `{table_id}`")
-
-        # 3. Preparar la fila (Sanitizar JSON)
-        # Convertimos el dict a string JSON y luego otra vez a dict para asegurar
-        # que no hay objetos raros (como fechas datetime) que rompan la inserción.
-        try:
-            audit_log_clean = json.loads(json.dumps(audit_log, default=str))
-        except Exception as e:
-            st.error(f"❌ Error serializando el JSON del log: {e}")
-            return
-
+        # Sanitizar JSON
+        audit_clean = json.loads(json.dumps(audit_log, default=str))
+        
         row = {
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "location_id": 8507,
             "rating": rating,
             "user_feedback": feedback_text,
             "accepted": accepted,
-            "full_audit_log": audit_log_clean 
+            "full_audit_log": audit_clean
         }
         
-        # Muestra en pantalla qué vamos a enviar (para que tú lo veas)
-        with st.expander("📦 Ver Payload exacto a enviar"):
-            st.json(row)
-
-        # 4. Intentar Insertar
+        add_log("Enviando fila a BigQuery...", "info")
         errors = client.insert_rows_json(table_id, [row])
         
         if errors == []:
-            st.success("✅ ¡BigQuery dice que se guardó correctamente!")
+            add_log("✅ ¡INSERT EXITOSO! BigQuery devolvió OK.", "success")
             st.toast("Guardado OK", icon="🎉")
         else:
-            st.error(f"❌ BigQuery rechazó los datos. Errores:")
-            st.write(errors)
-            st.warning("Pista: Si el error dice 'no such field', revisa el nombre de las columnas en BigQuery.")
+            add_log(f"❌ BigQuery rechazó los datos: {errors}", "error")
 
     except Exception as e:
-        st.error(f"💥 Excepción crítica en Python: {e}")
-        # Imprime el traceback completo para ver dónde explota
-        import traceback
-        st.text(traceback.format_exc())
+        add_log(f"💥 EXCEPCIÓN PYTHON: {str(e)}", "error")
+        add_log(traceback.format_exc(), "error")
 
 def load_history_from_bq(selected_date=None):
+    client = get_bq_client()
+    if not client: return pd.DataFrame()
+    
+    where = f"WHERE DATE(timestamp) = '{selected_date.strftime('%Y-%m-%d')}'" if selected_date else ""
+    q = f"SELECT timestamp, rating, user_feedback, full_audit_log, accepted FROM `{PROJECT_ID}.{DATASET_ID}.recommendation_history` {where} ORDER BY timestamp DESC LIMIT 20"
+    
     try:
-        client = get_bq_client()
-        where_clause = ""
-        if selected_date:
-            where_clause = f"WHERE DATE(timestamp) = '{selected_date.strftime('%Y-%m-%d')}'"
-        
-        q = f"""
-            SELECT timestamp, rating, user_feedback, full_audit_log, accepted 
-            FROM `{PROJECT_ID}.{DATASET_ID}.recommendation_history`
-            {where_clause}
-            ORDER BY timestamp DESC
-            LIMIT 50
-        """
         return client.query(q).to_dataframe()
     except Exception as e:
-        st.error(f"Error conexión BQ (Leer): {e}")
+        add_log(f"Error leyendo historial: {e}", "error")
         return pd.DataFrame()
-
-# ==========================
-# HELPERS
-# ==========================
-def parse_timeseries_to_df(ts_data):
-    if not ts_data or "metrics" not in ts_data: return pd.DataFrame()
-    dfs = []
-    for m, vals in ts_data["metrics"].items():
-        if not vals: continue
-        df = pd.DataFrame(vals)
-        if "ts_utc" in df.columns:
-            df["ts_utc"] = pd.to_datetime(df["ts_utc"])
-            df = df.rename(columns={"value": m}).set_index("ts_utc")
-            dfs.append(df)
-    return pd.concat(dfs, axis=1).sort_index() if dfs else pd.DataFrame()
-
-def render_quality_indicator(data_context):
-    ts = data_context.get("recent_timeseries", {}).get("metrics", {})
-    daily = data_context.get("daily_features", [])
-    c1, c2, c3 = st.columns(3)
-    with c1: 
-        if any(len(v)>0 for v in ts.values()): st.success("📡 Sensores Online")
-        else: st.warning("📡 Sin datos")
-    with c2: 
-        if len(daily)>=5: st.success(f"📅 Histórico: {len(daily)} días")
-        else: st.warning(f"📅 Histórico: {len(daily)} días")
-    with c3: st.info("⏱️ Latencia: < 5min")
 
 # ==========================
 # UI PRINCIPAL
 # ==========================
-st.title("🌿 Sistema Integral de Gestión Agrícola (S4)")
+st.title("🌿 Sistema Integral (Modo Debug)")
 
+# ZONA DE DEBUG VISIBLE SIEMPRE
+with st.expander("🛠️ CONSOLA DE DEPURACIÓN (Ver aquí si falla)", expanded=True):
+    if st.button("Limpiar Logs"): st.session_state.debug_logs = []
+    for log in st.session_state.debug_logs:
+        if log["type"] == "error": st.error(f"[{log['ts']}] {log['msg']}")
+        elif log["type"] == "success": st.success(f"[{log['ts']}] {log['msg']}")
+        elif log["type"] == "warning": st.warning(f"[{log['ts']}] {log['msg']}")
+        else: st.info(f"[{log['ts']}] {log['msg']}")
+
+# Estado
 if "results" not in st.session_state: st.session_state.results = None
 
 with st.sidebar:
     st.header("📋 Configuración")
     with st.form("params"):
-        crop = st.selectbox("Especie", ["tomate", "pimiento", "pepino"])
-        stage = st.selectbox("Fase", ["cuajado_y_engorde", "maduracion", "crecimiento"])
-        notes = st.text_area("Observaciones", placeholder="Ej: Veo hojas amarillas...")
-        submitted = st.form_submit_button("🔄 EJECUTAR ANÁLISIS", type="primary")
+        submitted = st.form_submit_button("🔄 EJECUTAR ANÁLISIS")
     
-    st.divider()
-    st.caption("🛠️ Modo Desarrollo")
-    use_irr = st.toggle("Agente Riego", True)
-    use_str = st.toggle("Agente Estrés", True)
-    use_prod = st.toggle("Agente Productos", True)
+    use_mock = st.toggle("Usar Mocks (Ahorrar Tokens)", True)
 
 if submitted:
-    ctx = {"crop": {"species": crop, "phenological_stage": stage}}
-    base = {"context_overrides": ctx, "farmer_notes": notes}
-    irr_resp, str_resp, prod_resp, raw_riego = {}, {}, {}, {}
-
-    with st.status("🤖 Coordinando Agentes...", expanded=True) as s:
-        # 1. Riego
-        s.write("💧 Riego...")
-        if use_irr:
-            try:
-                r = requests.post(IRRIGATION_URL, json=base, timeout=60)
-                d = r.json()
-                irr_resp, raw_riego = d.get("agent_response", {}), d.get("data_context", {})
-            except Exception as e: st.error(f"Error Riego: {e}")
-        else:
-            time.sleep(0.5); irr_resp, raw_riego = MOCK_IRRIGATION_DATA["agent_response"], MOCK_IRRIGATION_DATA["data_context"]
-
-        # 2. Estrés
-        s.write("🌡️ Estrés...")
-        if use_str:
-            try:
-                r = requests.post(STRESS_URL, json=base, timeout=60)
-                str_resp = r.json().get("agent_response", {})
-            except Exception as e: st.warning(f"Error Estrés: {e}")
-        else:
-            time.sleep(0.5); str_resp = MOCK_STRESS_DATA["agent_response"]
-
-        # 3. Productos
-        s.write("🧪 Productos...")
-        if use_prod:
-            pl = {**base, "irrigation_recommendation": irr_resp, "stress_alert": str_resp}
-            try:
-                r = requests.post(PRODUCT_URL, json=pl, timeout=90)
-                prod_resp = r.json()
-            except Exception as e: st.warning(f"Error Prod: {e}")
-        else:
-            time.sleep(0.5); prod_resp = MOCK_PRODUCT_DATA
-        
-        s.update(label="¡Completado!", state="complete", expanded=False)
+    # Lógica simplificada para probar el guardado
+    add_log("Análisis ejecutado.", "info")
+    if use_mock:
         st.session_state.results = {
-            "irrigation": irr_resp, "raw_riego": raw_riego,
-            "stress": str_resp, "product": prod_resp,
-            "audit": prod_resp.get("audit_log", {})
+            "irrigation": MOCK_IRRIGATION_DATA,
+            "product": MOCK_PRODUCT_DATA,
+            "audit": MOCK_PRODUCT_DATA["audit_log"]
         }
+        add_log("Datos Mock cargados.", "success")
+    else:
+        # Aquí irían tus llamadas reales
+        pass
 
-tab_dash, tab_riego, tab_estres, tab_prod, tab_hist = st.tabs(["📊 Monitor", "💧 Riego", "🌡️ Estrés", "🧪 Plan & Feedback", "📜 Historial"])
+tab_plan, tab_hist = st.tabs(["🧪 Plan & Feedback", "📜 Historial"])
 
-if st.session_state.results:
-    res = st.session_state.results
-    
-    with tab_dash:
-        render_quality_indicator(res["raw_riego"])
-        df = parse_timeseries_to_df(res["raw_riego"].get("recent_timeseries", {}))
-        if not df.empty and [c for c in df.columns if "VWC" in c]: st.line_chart(df[[c for c in df.columns if "VWC" in c]], height=250)
+# PESTAÑA FEEDBACK
+with tab_plan:
+    if st.session_state.results:
+        res = st.session_state.results
+        st.json(res["audit"])
         
-    with tab_riego:
-        rec = res["irrigation"].get("recommendation", {})
-        if rec:
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                if rec.get("apply_irrigation"): st.success(f"🚿 RIEGO: {rec.get('reason')}")
-                else: st.info("⏸️ NO REGAR")
-                st.metric("Volumen", f"{rec.get('suggested_water_l_m2', 0)} L/m²")
-            with c2: st.info(res["irrigation"].get("explanation", "-"))
-            if rec.get("suggested_cycles"): st.table(rec["suggested_cycles"])
-        else: st.error("Sin datos.")
-
-    with tab_estres:
-        alert = res["stress"].get("stress_alert", {})
-        if alert:
-            rl = alert.get("risk_level", "?")
-            col = "red" if "ALTO" in rl else "orange" if "MEDIO" in rl else "green"
-            st.markdown(f"### Riesgo: :{col}[{rl}] ({alert.get('primary_risk')})")
-            st.info(alert.get("detailed_reason"))
-            c1, c2 = st.columns(2)
-            c1.markdown("**🌬️ Clima**"); c1.write(res["stress"].get("recommendations", {}).get("climate_control"))
-            c2.markdown("**🦠 Sanidad**"); c2.write(res["stress"].get("recommendations", {}).get("sanitary_alert"))
-        else: st.info("Sin alertas.")
-
-    with tab_prod:
-        plan = res["product"].get("product_plan", [])
-        st.markdown("### 🧪 Estrategia")
-        st.write(res["product"].get("agronomic_advice", ""))
-        for p in plan:
-            with st.expander(f"🧴 {p.get('product_name')}", expanded=True):
-                st.write(f"**Dosis:** {p.get('dose')} | **Momento:** {p.get('application_timing')}")
-                st.caption(p.get('reason'))
+        st.divider()
+        st.subheader("Guardar Feedback")
         
-        if res["audit"]:
-            st.divider()
-            with st.expander("👁️ Ver/Copiar JSON Técnico"): 
-                st.code(json.dumps(res["audit"], indent=2, ensure_ascii=False), language="json")
-            st.divider()
-            st.markdown("### ⭐ Valoración")
-            with st.form("fb"):
-                c1, c2 = st.columns(2)
-                rat = c1.slider("Nota", 1, 5, 3)
-                acc = c1.checkbox("Aceptado", True)
-                txt = c2.text_area("Comentarios")
-                if st.form_submit_button("💾 Guardar"):
-                    save_feedback_to_bq(res["audit"], rat, txt, acc)
+        # FORMULARIO
+        with st.form("fb_form"):
+            rating = st.slider("Nota", 1, 5, 5)
+            txt = st.text_area("Comentario", "Test debug")
+            accepted = st.checkbox("Aceptado", True)
+            
+            # AL PULSAR GUARDAR
+            if st.form_submit_button("💾 GUARDAR EN BIGQUERY"):
+                save_feedback_to_bq(res["audit"], rating, txt, accepted)
+    else:
+        st.info("Ejecuta el análisis primero.")
 
-else:
-    with tab_dash: st.info("👈 Pulsa 'Ejecutar Análisis' para ver datos.")
-
+# PESTAÑA HISTORIAL
 with tab_hist:
-    c_date, c_btn = st.columns([1, 3])
-    sel_date = c_date.date_input("Filtrar Fecha", value=None)
-    
-    if st.button("🔄 Cargar Historial"):
-        df = load_history_from_bq(selected_date=sel_date)
+    if st.button("🔄 Refrescar Tabla"):
+        df = load_history_from_bq()
         if not df.empty:
-            for i, r in df.iterrows():
-                stars = "⭐" * int(r['rating'])
-                status = "✅ Aceptado" if r['accepted'] else "❌ Rechazado"
-                with st.expander(f"{r['timestamp']} | {stars} | {status}"):
-                    st.write(f"**Feedback:** {r['user_feedback']}")
-                    
-                    # --- CORRECCIÓN AQUÍ: MANEJO SEGURO DE JSON/DICT ---
-                    log_data = r['full_audit_log']
-                    if isinstance(log_data, str):
-                        try:
-                            log_data = json.loads(log_data)
-                        except:
-                            log_data = {}
-                    
-                    # Renderizar tabla
-                    if isinstance(log_data, dict):
-                        prod_list = log_data.get("ai_reasoning_output", {}).get("product_plan", [])
-                        if prod_list: st.table(pd.DataFrame(prod_list))
-                        if st.checkbox("JSON Completo", key=f"h_{i}"): st.json(log_data)
-                    else:
-                        st.warning("Formato de log inválido.")
+            st.dataframe(df)
         else:
-            st.warning("No hay registros.")
+            st.warning("Tabla vacía o error de lectura (mira los logs arriba).")
