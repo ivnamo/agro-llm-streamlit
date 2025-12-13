@@ -2,20 +2,78 @@ import streamlit as st
 import requests
 import pandas as pd
 import json
+import time
 import os
+
+# ==========================
+# 0. DATOS MOCK (LOREM IPSUM)
+# ==========================
+# Estos diccionarios imitan la estructura real para probar la UI sin gastar tokens.
+
+MOCK_IRRIGATION_DATA = {
+    "agent_response": {
+        "recommendation": {
+            "apply_irrigation": True,
+            "reason": "increase (MOCK)",
+            "suggested_water_l_m2": 5.5,
+            "suggested_cycles": [
+                {"start_time_local": "2025-12-14T09:00:00", "duration_minutes": 20, "comment": "Ciclo Simulado 1"},
+                {"start_time_local": "2025-12-14T15:00:00", "duration_minutes": 15, "comment": "Ciclo Simulado 2"}
+            ],
+            "warnings": ["[MOCK] Esto es una alerta simulada de prueba."],
+        },
+        "explanation": "Respuesta simulada (LOREM IPSUM). El agente de riego ha determinado que faltan datos reales, así que se inventa este texto para que compruebes que la interfaz se renderiza bien sin llamar a Gemini."
+    },
+    "data_context": {
+        "recent_timeseries": {"metrics": {}}, # Vacío para no romper gráficas
+        "daily_features": []
+    }
+}
+
+MOCK_STRESS_DATA = {
+    "agent_response": {
+        "stress_alert": {
+            "risk_level": "ALTO (MOCK)",
+            "primary_risk": "Abiótico (Simulación)",
+            "detailed_reason": "Se simula un riesgo alto de Lorem Ipsum debido a condiciones de Dolor Sit Amet en la atmósfera."
+        },
+        "recommendations": {
+            "climate_control": "Activar ventilación simulada al 100%.",
+            "sanitary_alert": "Vigilar vectores de prueba en el sector 7G."
+        }
+    }
+}
+
+MOCK_PRODUCT_DATA = {
+    "product_plan": [
+        {
+            "product_name": "Producto Mock A",
+            "dose": "2 L/ha",
+            "application_timing": "Inmediato",
+            "reason": "Para tratar el déficit de Lorem Ipsum detectado."
+        },
+        {
+            "product_name": "Producto Mock B",
+            "dose": "300 cc/100L",
+            "application_timing": "Foliar",
+            "reason": "Refuerzo preventivo de UI Testing."
+        }
+    ],
+    "agronomic_advice": "Estrategia agronómica simulada. No se ha realizado ninguna inferencia real. Todo parece correcto en la simulación."
+}
 
 # ==========================
 # CONFIGURACIÓN
 # ==========================
 st.set_page_config(page_title="Agro-IA: S4 Invernadero", page_icon="🌿", layout="wide")
 
-# URLs de los servicios (Variables de entorno o secrets)
+# URLs
 IRRIGATION_URL = os.getenv("IRRIGATION_URL") or st.secrets.get("irrigation_url")
 PRODUCT_URL = os.getenv("PRODUCT_URL") or st.secrets.get("product_url")
 STRESS_URL = os.getenv("STRESS_URL") or st.secrets.get("stress_url")
 
 if not IRRIGATION_URL:
-    st.error("❌ Falta configurar las URLs de los servicios (IRRIGATION_URL, etc.)")
+    st.error("❌ Falta configurar las URLs de los servicios.")
     st.stop()
 
 # ==========================
@@ -46,7 +104,7 @@ def render_quality_indicator(data_context):
     
     with col1:
         if has_data: st.success("📡 Sensores Online")
-        else: st.error("📡 Sin conexión Sensores")
+        else: st.warning("📡 Sin datos (Mock/Offline)")
             
     with col2:
         if len(daily) >= 5: st.success(f"📅 Histórico: {len(daily)} días")
@@ -72,9 +130,15 @@ with st.sidebar:
         farmer_notes = st.text_area("Observaciones", placeholder="Ej: Veo hojas amarillas, posible oídio...")
         
         submitted = st.form_submit_button("🔄 EJECUTAR ANÁLISIS", type="primary")
+    
+    st.divider()
+    st.markdown("### 🛠️ Modo Desarrollo (Tokens)")
+    st.caption("Desactiva para usar datos 'fake' y no gastar dinero.")
+    use_real_irrigation = st.toggle("Activar Agente Riego", value=True)
+    use_real_stress = st.toggle("Activar Agente Estrés", value=True)
+    use_real_products = st.toggle("Activar Agente Productos", value=True)
 
 if submitted:
-    # Definimos pestañas incluyendo la nueva de Estrés
     tab_dashboard, tab_riego, tab_estres, tab_productos = st.tabs([
         "📊 Monitorización", 
         "💧 Riego (Hidráulica)", 
@@ -91,78 +155,88 @@ if submitted:
         "farmer_notes": farmer_notes
     }
 
-    # --- ORQUESTACIÓN DE AGENTES ---
     irrigation_resp = {}
     stress_resp = {}
     product_resp = {}
     raw_data_riego = {}
     
-    # Usamos un contenedor de estado para informar del progreso
     with st.status("🤖 Coordinando Agentes Inteligentes...", expanded=True) as status:
         
-        # 1. PARALELO VIRTUAL: Riego y Estrés
-        # (En Python requests es bloqueante, pero son rápidos)
-        
-        # --- AGENTE DE RIEGO ---
-        status.write("💧 Agente Hidráulico: Calculando balance y pronóstico...")
-        try:
-            r_irr = requests.post(IRRIGATION_URL, json=payload_base, timeout=60)
-            r_irr.raise_for_status()
-            data_irr = r_irr.json()
-            irrigation_resp = data_irr.get("agent_response", {})
-            raw_data_riego = data_irr.get("data_context", {})
-            status.write("✅ Riego completado.")
-        except Exception as e:
-            st.error(f"Fallo en Agente Riego: {e}")
+        # --- 1. AGENTE DE RIEGO ---
+        status.write("💧 Contactando Agente Hidráulico...")
+        if use_real_irrigation:
+            try:
+                r_irr = requests.post(IRRIGATION_URL, json=payload_base, timeout=60)
+                r_irr.raise_for_status()
+                data_irr = r_irr.json()
+                irrigation_resp = data_irr.get("agent_response", {})
+                raw_data_riego = data_irr.get("data_context", {})
+                status.write("✅ Riego (REAL) completado.")
+            except Exception as e:
+                st.error(f"Fallo en Agente Riego: {e}")
+        else:
+            time.sleep(1) # Simular latencia
+            irrigation_resp = MOCK_IRRIGATION_DATA["agent_response"]
+            raw_data_riego = MOCK_IRRIGATION_DATA["data_context"]
+            status.write("⚠️ Riego (MOCK) cargado.")
 
-        # --- AGENTE DE ESTRÉS ---
-        status.write("🌡️ Agente Fisiólogo: Analizando riesgos bióticos/abióticos...")
-        try:
-            r_str = requests.post(STRESS_URL, json=payload_base, timeout=60)
-            r_str.raise_for_status()
-            data_str = r_str.json()
-            stress_resp = data_str.get("agent_response", {})
-            status.write("✅ Análisis de estrés completado.")
-        except Exception as e:
-            st.warning(f"Agente Estrés no disponible: {e}")
+        # --- 2. AGENTE DE ESTRÉS ---
+        status.write("🌡️ Contactando Agente Fisiólogo...")
+        if use_real_stress:
+            try:
+                r_str = requests.post(STRESS_URL, json=payload_base, timeout=60)
+                r_str.raise_for_status()
+                data_str = r_str.json()
+                stress_resp = data_str.get("agent_response", {})
+                status.write("✅ Estrés (REAL) completado.")
+            except Exception as e:
+                st.warning(f"Agente Estrés no disponible: {e}")
+        else:
+            time.sleep(1)
+            stress_resp = MOCK_STRESS_DATA["agent_response"]
+            status.write("⚠️ Estrés (MOCK) cargado.")
 
-        # 2. SÍNTESIS: Agente de Productos
-        # Le pasamos lo que dijeron los otros dos
-        status.write("🧪 Agente Agrónomo: Diseñando estrategia integral...")
-        
-        payload_prod = {
-            **payload_base,
-            "irrigation_recommendation": irrigation_resp, # Input del Hidráulico
-            "stress_alert": stress_resp                   # Input del Fisiólogo
-        }
-        
-        try:
-            r_prod = requests.post(PRODUCT_URL, json=payload_prod, timeout=90)
-            r_prod.raise_for_status()
-            product_resp = r_prod.json()
-            status.write("✅ Plan nutricional generado.")
-        except Exception as e:
-            st.warning(f"Agente Productos no disponible: {e}")
+        # --- 3. AGENTE DE PRODUCTOS ---
+        status.write("🧪 Contactando Agente Agrónomo...")
+        if use_real_products:
+            payload_prod = {
+                **payload_base,
+                "irrigation_recommendation": irrigation_resp,
+                "stress_alert": stress_resp
+            }
+            try:
+                r_prod = requests.post(PRODUCT_URL, json=payload_prod, timeout=90)
+                r_prod.raise_for_status()
+                product_resp = r_prod.json()
+                status.write("✅ Plan (REAL) generado.")
+            except Exception as e:
+                st.warning(f"Agente Productos no disponible: {e}")
+        else:
+            time.sleep(1.5)
+            product_resp = MOCK_PRODUCT_DATA
+            status.write("⚠️ Plan (MOCK) cargado.")
             
-        status.update(label="¡Estrategia Completa Generada!", state="complete", expanded=False)
+        status.update(label="¡Estrategia Generada!", state="complete", expanded=False)
 
     # --- PESTAÑA 1: DASHBOARD ---
     with tab_dashboard:
         st.markdown("### 📡 Estado de los Sensores")
-        if raw_data_riego:
-            render_quality_indicator(raw_data_riego)
+        render_quality_indicator(raw_data_riego) # Funciona aunque venga vacío del Mock
+        
+        if raw_data_riego and raw_data_riego.get("recent_timeseries", {}).get("metrics"):
             df_ts = parse_timeseries_to_df(raw_data_riego.get("recent_timeseries", {}))
-            
             if not df_ts.empty:
                 cols_vwc = [c for c in df_ts.columns if "VWC" in c]
-                if cols_vwc:
-                    st.line_chart(df_ts[cols_vwc], height=250)
+                if cols_vwc: st.line_chart(df_ts[cols_vwc], height=250)
                 
                 c1, c2 = st.columns(2)
                 if "T_in" in df_ts.columns: c1.line_chart(df_ts[["T_in"]], height=200, color="#FF4B4B")
                 if "RF" in df_ts.columns: c2.line_chart(df_ts[["RF"]], height=200, color="#FFA500")
         else:
-            st.info("Sin datos de sensores.")
+            if not use_real_irrigation:
+                st.info("ℹ️ En modo MOCK no se cargan datos reales de sensores para ahorrar lecturas a BigQuery.")
+            else:
+                st.warning("Sin datos de sensores.")
 
     # --- PESTAÑA 2: RIEGO ---
     with tab_riego:
@@ -185,15 +259,16 @@ if submitted:
             
             for w in reco.get("warnings", []): st.warning(f"⚠️ {w}")
         else:
-            st.error("El agente de riego no devolvió una recomendación válida.")
+            st.error("Sin recomendación válida.")
 
-    # --- PESTAÑA 3: ESTRÉS (NUEVA) ---
+    # --- PESTAÑA 3: ESTRÉS ---
     with tab_estres:
         alert = stress_resp.get("stress_alert", {})
         recs = stress_resp.get("recommendations", {})
         
         if alert:
             risk_level = alert.get("risk_level", "DESCONOCIDO")
+            # Lógica simple de colores
             color = "red" if "ALTO" in risk_level else "orange" if "MEDIO" in risk_level else "green"
             
             st.markdown(f"### Riesgo Detectado: :{color}[{risk_level}]")
