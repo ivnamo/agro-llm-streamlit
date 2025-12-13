@@ -148,7 +148,9 @@ def render_quality_indicator(data_context):
 # ==========================
 st.title("🌿 Sistema Integral de Gestión Agrícola (S4)")
 
+# Inicializar estados si no existen
 if "results" not in st.session_state: st.session_state.results = None
+if "history_df" not in st.session_state: st.session_state.history_df = None # NUEVO PARA EL HISTORIAL
 
 with st.sidebar:
     st.header("📋 Configuración")
@@ -284,14 +286,19 @@ else:
     with tab_dash: st.info("👈 Pulsa 'Ejecutar Análisis' para comenzar.")
 
 # ==========================
-# PESTAÑA HISTORIAL (CORREGIDA)
+# PESTAÑA HISTORIAL (PERSISTENTE)
 # ==========================
 with tab_hist:
     c_date, c_btn = st.columns([1, 3])
     sel_date = c_date.date_input("Filtrar Fecha", value=None)
     
+    # 1. Si se pulsa el botón, cargamos datos y guardamos en session_state
     if st.button("🔄 Cargar Historial"):
-        df = load_history_from_bq(selected_date=sel_date)
+        st.session_state.history_df = load_history_from_bq(selected_date=sel_date)
+        
+    # 2. Renderizamos SIEMPRE que haya datos en session_state, sin depender del botón
+    if st.session_state.history_df is not None:
+        df = st.session_state.history_df
         
         if not df.empty:
             st.caption(f"Mostrando los últimos {len(df)} registros.")
@@ -308,26 +315,21 @@ with tab_hist:
                         try: log_data = json.loads(log_data)
                         except: log_data = {}
                     
-                    # Buscar plan de productos
                     plan_found = log_data.get("product_plan") 
                     if not plan_found and "agent_response" in log_data:
                          plan_found = log_data["agent_response"].get("product_plan")
 
-                    # --- CORRECCIÓN AQUÍ: Evitamos KeyError ---
                     if plan_found and isinstance(plan_found, list):
                         st.subheader("Plan Generado:")
                         df_plan = pd.DataFrame(plan_found)
                         
-                        # Lista de columnas ideales
+                        # Filtro defensivo de columnas
                         cols_wanted = ["product_name", "dose", "reason"]
-                        
-                        # Solo pedimos las que existen en los datos (Intersección)
                         final_cols = [c for c in cols_wanted if c in df_plan.columns]
                         
                         if final_cols:
                             st.dataframe(df_plan[final_cols])
                         else:
-                            # Si no coinciden las columnas, mostramos todo lo que haya
                             st.dataframe(df_plan)
                     
                     if st.toggle("👁️ Ver JSON Técnico Completo", key=f"json_t_{i}"):
